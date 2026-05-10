@@ -17,6 +17,8 @@ import logging
 import os
 import re
 import hashlib
+import shutil
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -199,6 +201,110 @@ def _cluster_genes_by_sequence_identity(
     return cluster_map
 
 
+def _cluster_genes_with_mmseqs2(
+    all_records: List[GeneRecord],
+    identity_threshold: float = 0.80,
+    temp_dir: Optional[str] = None,
+) -> Dict[str, str]:
+    """
+    Ortholog clustering using MMseqs2 (faster and more accurate than k-mer).
+
+    Requires mmseqs2 to be installed and available in PATH.
+
+    Parameters
+    ----------
+    all_records : List[GeneRecord]
+        List of gene records to cluster.
+    identity_threshold : float
+        Minimum sequence identity for clustering (passed to mmseqs2 as --min-seq-id).
+    temp_dir : str, optional
+        Directory to store temporary FASTA and TSV files. If None, uses system temp.
+
+    Returns
+    -------
+    Dict[gene_id → cluster_id]
+        Cluster IDs are MMseqs-generated cluster numbers.
+
+    Raises
+    ------
+    RuntimeError
+        If mmseqs2 is not found or fails.
+    """
+    try:
+        import subprocess
+    except ImportError:
+        raise RuntimeError("subprocess module is not available, cannot run MMseqs2")
+
+    logger.info(
+        "Running MMseqs2 ortholog clustering on %d sequences (identity ≥ %.0f%%) …",
+        len(all_records),
+        identity_threshold * 100,
+    )
+
+    if not all_records:
+        return {}
+
+    temp_dir = Path(temp_dir) if temp_dir else Path(tempfile.mkdtemp())
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write input FASTA
+    input_fasta = temp_dir / "input.fasta"
+    with open(input_fasta, "w") as f:
+        for record in all_records:
+            # Use gene_id as header, store original gene_id in description
+            f.write(f">{record.gene_id}\n{record.sequence}\n")
+
+    # Run MMseqs2 clustering
+    cluster_db = temp_dir / "cluster_db"
+    cluster_tsv = temp_dir / "cluster.tsv"
+    cluster_pref = temp_dir / "cluster_pref"
+
+    try:
+        # Step 1: Create database
+        subprocess.run(
+            ["mmseqs", "createdb", str(input_fasta), str(cluster_db)],
+            check=True, capture_output=True, text=True
+        )
+        # Step 2: Cluster
+        subprocess.run(
+            ["mmseqs", "cluster", str(cluster_db), str(cluster_tsv), str(cluster_pref),
+             "--min-seq-id", str(identity_threshold)],
+            check=True, capture_output=True, text=True
+        )
+    except FileNotFoundError:
+        raise RuntimeError("mmseqs2 executable not found in PATH. Please install MMseqs2.")
+    except subprocess.CalledProcessError as e:
+        logger.error("MMseqs2 clustering failed: {}", e.stderr)
+        raise RuntimeError(f"MMseqs2 failed with error: {e.stderr}") from e
+
+    # Parse MMseqs2 TSV output
+    # Format: gene_id cluster_id cluster_representative
+    cluster_map: Dict[str, str] = {}
+    try:
+        with open(cluster_tsv) as f:
+            for line in f:
+                parts = line.strip().split("\t")
+                if len(parts) >= 2:
+                    gene_id = parts[0]
+                    cluster_id = parts[1]
+                    cluster_map[gene_id] = cluster_id
+    except FileNotFoundError:
+        logger.error("MMseqs2 output file not found: {}", cluster_tsv)
+        raise RuntimeError(f"MMseqs2 output file not found: {cluster_tsv}")
+
+    n_clusters = len(set(cluster_map.values()))
+    logger.info(
+        "MMseqs2 clustering complete: %d genes → %d ortholog clusters",
+        len(all_records),
+        n_clusters,
+    )
+
+    # Clean up temp files
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
+    return cluster_map
+
+
 # ===========================================================================
 # Main Class
 # ===========================================================================
@@ -241,6 +347,7 @@ class PangenomeMiner:
         identity_threshold: float = 0.80,
         feature_types: Optional[List[str]] = None,
         min_gene_length: int = 100,
+        cluster_method: str = "kmer",
     ) -> None:
         if not (0.0 < core_threshold <= 1.0):
             raise ValueError(f"core_threshold must be in (0, 1], got {core_threshold}")
@@ -259,6 +366,11 @@ class PangenomeMiner:
         self.identity_threshold = identity_threshold
         self.feature_types = set(feature_types or ["CDS"])
         self.min_gene_length = min_gene_length
+        
+        valid_methods = ["kmer", "mmseqs2"]
+        if cluster_method not in valid_methods:
+            raise ValueError(f"cluster_method must be one of {valid_methods}, got {cluster_method}")
+        self.cluster_method = cluster_method
 
         # Internal state (populated during pipeline run)
         self._strain_ids: List[str] = []
@@ -469,10 +581,16 @@ class PangenomeMiner:
             raise RuntimeError("No gene records loaded. Call load_genomes() first.")
 
         # Ortholog clustering
-        self._cluster_map = _cluster_genes_by_sequence_identity(
-            self._all_records,
-            identity_threshold=self.identity_threshold,
-        )
+        if self.cluster_method == "mmseqs2":
+            self._cluster_map = _cluster_genes_with_mmseqs2(
+                self._all_records,
+                identity_threshold=self.identity_threshold,
+            )
+        else:  # kmer
+            self._cluster_map = _cluster_genes_by_sequence_identity(
+                self._all_records,
+                identity_threshold=self.identity_threshold,
+            )
 
         logger.info("Building presence/absence matrix …")
 
@@ -503,55 +621,81 @@ class PangenomeMiner:
     # ------------------------------------------------------------------
     # Step 3 — Pangenome partitioning
     # ------------------------------------------------------------------
-    def partition_pangenome(self) -> Tuple[pd.Index, pd.Index, pd.Index]:
-        """
-        Partition the pangenome into three tiers based on strain-fraction:
+def calculate_rarefaction(self, iterations: int = 10) -> np.ndarray:
+    """Calculate pangenome rarefaction curve (average unique clusters per k genomes)."""
+    if self._matrix is None:
+        raise RuntimeError("Matrix not built.")
+    n_strains = self._matrix.shape[1]
+    rarefaction_means = np.zeros(n_strains)
+    vals = self._matrix.values
+    for k in range(1, n_strains + 1):
+        counts = []
+        for _ in range(iterations):
+            indices = np.random.choice(n_strains, k, replace=False)
+            count = np.any(vals[:, indices], axis=1).sum()
+            counts.append(count)
+        rarefaction_means[k - 1] = np.mean(counts)
+    return rarefaction_means
 
-        - **Core genome**      : present in ≥ ``core_threshold`` of strains
-        - **Accessory genome** : present in ≤ ``accessory_threshold`` of strains
-        - **Shell genome**     : everything in between (not passed downstream)
+def partition_pangenome(self) -> Tuple[pd.Index, pd.Index, pd.Index]:
+    """
+    Partition the pangenome into three tiers based on strain-fraction.
+    Also calculates Heaps' Law and Rarefaction curve statistics.
+    """
+    if self._matrix is None:
+        raise RuntimeError("Matrix not built. Call build_presence_absence_matrix() first.")
 
-        Returns
-        -------
-        (core_genes, accessory_genes, shell_genes)  — each a pandas Index
-        """
-        if self._matrix is None:
-            raise RuntimeError("Matrix not built. Call build_presence_absence_matrix() first.")
+    n_strains = len(self._strain_ids)
+    fraction_present = self._matrix.sum(axis=1) / n_strains
 
-        n_strains = len(self._strain_ids)
-        fraction_present = self._matrix.sum(axis=1) / n_strains
+    effective_acc = max(self.accessory_threshold, 1.0 / n_strains)
+    effective_acc = min(effective_acc, self.core_threshold - 1e-6)
 
-        # With small strain counts the fixed accessory_threshold can be unreachable
-        # (e.g. 10% of 5 strains = 0.5, so nothing qualifies as accessory).
-        # Effective threshold: at least 1 strain worth of presence, i.e. 1/n_strains.
-        effective_acc = max(self.accessory_threshold, 1.0 / n_strains)
-        # Safety clamp: effective_acc must never reach core_threshold
-        effective_acc = min(effective_acc, self.core_threshold - 1e-6)
-        if effective_acc > self.accessory_threshold:
-            logger.info(
-                "accessory_threshold %.2f adjusted to %.2f (= 1/%d strains) ",
-                self.accessory_threshold, effective_acc, n_strains,
-            )
+    core_genes = self._matrix.index[fraction_present >= self.core_threshold]
+    accessory_genes = self._matrix.index[fraction_present <= effective_acc]
+    shell_genes = self._matrix.index[
+        (fraction_present > effective_acc) & (fraction_present < self.core_threshold)
+    ]
 
-        core_genes = self._matrix.index[fraction_present >= self.core_threshold]
-        accessory_genes = self._matrix.index[fraction_present <= effective_acc]
-        shell_genes = self._matrix.index[
-            (fraction_present > effective_acc)
-            & (fraction_present < self.core_threshold)
-        ]
+    # Heaps' Law
+    n_genomes = np.arange(1, n_strains + 1)
+    unique_genes = []
+    for i in n_genomes:
+        subset = self._matrix.sample(n=i, axis=1)
+        unique_genes.append(subset.sum(axis=1).gt(0).sum())
 
-        logger.info(
-            "Pangenome partitioning (%d strains, accessory ≤ %.0f%%):\n"
-            "  Core       (≥%.0f%%): %5d clusters\n"
-            "  Shell                : %5d clusters\n"
-            "  Accessory  (≤%.0f%%): %5d clusters",
-            n_strains,
-            effective_acc * 100,
-            self.core_threshold * 100, len(core_genes),
-            len(shell_genes),
-            effective_acc * 100, len(accessory_genes),
-        )
-        return core_genes, accessory_genes, shell_genes
+    from scipy.optimize import curve_fit
+    def heaps_law(n, k, beta):
+        return k * np.power(n, beta)
+    
+    try:
+        popt, _ = curve_fit(heaps_law, n_genomes, unique_genes, p0=[1000, 0.5])
+        k, beta = popt
+        heaps_stats = {"k": float(k), "beta": float(beta), "open": beta > 0}
+    except Exception as e:
+        logger.warning("Heaps' Law calculation failed: %s", e)
+        heaps_stats = {"k": 0.0, "beta": 0.0, "open": None}
+
+    rarefaction = self.calculate_rarefaction()
+
+    logger.info(
+        "Pangenome partitioning (%d strains):\n"
+        "  Core       (≥%.0f%%): %5d clusters\n"
+        "  Shell                : %5d clusters\n"
+        "  Accessory  (≤%.0f%%): %5d clusters\n"
+        "  Heaps' Law           : k=%.2f, beta=%.2f (Open=%s)",
+        n_strains,
+        self.core_threshold * 100, len(core_genes),
+        len(shell_genes),
+        effective_acc * 100, len(accessory_genes),
+        heaps_stats["k"], heaps_stats["beta"], heaps_stats["open"]
+    )
+    
+    self.stats.update({
+        "heaps_law": heaps_stats,
+        "rarefaction_curve": rarefaction.tolist()
+    })
+    return core_genes, accessory_genes, shell_genes
 
     # ------------------------------------------------------------------
     # Step 4 — Extract accessory coordinates (output to Phase 2)

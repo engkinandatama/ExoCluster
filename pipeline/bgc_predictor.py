@@ -90,6 +90,9 @@ if not _PROPHET_AVAILABLE:
 from pipeline.hgt_detective import HGTGeneRecord, HGTResult
 from pipeline.pangenome_miner import GeneRecord
 
+# For Fisher's test
+from scipy.stats import fisher_exact
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -1245,6 +1248,28 @@ class BGCPredictor:
         # Post-processing
         bgc_hits = [r for r in bgc_records if r.is_bgc]
 
+        # Fisher's Exact Test: Enrichment of BGC in HGT
+        # Contingency table:
+        #           BGC | non-BGC
+        # HGT     |  a  |    b
+        # non-HGT |  c  |    d
+        #
+        # Here HGT set = hgt_result.alien_records
+        # Non-HGT set = hgt_result.hgt_records - hgt_result.alien_records
+        # BGC set = bgc_hits
+        hgt_set = set(r.gene_record.gene_id for r in alien_records)
+        bgc_set = set(r.gene_id for r in bgc_hits)
+        all_accessory_ids = set(r.gene_record.gene_id for r in hgt_result.hgt_records)
+        
+        a = sum(1 for gid in bgc_set if gid in hgt_set)
+        b = sum(1 for gid in hgt_set if gid not in bgc_set)
+        c = sum(1 for gid in bgc_set if gid not in hgt_set)
+        d = sum(1 for gid in all_accessory_ids if gid not in hgt_set and gid not in bgc_set)
+        
+        odds, pval = fisher_exact([[a, b], [c, d]], alternative='greater')
+        fisher_stats = {"odds_ratio": float(odds), "p_value": float(pval)}
+        logger.info("Fisher's Exact Test (BGC enrichment in HGT): OR=%.2f, p=%.4f", odds, pval)
+
         # Summary statistics
         class_distribution = {cls: 0 for cls in BGC_CLASSES}
         strain_bgc_counts: Dict[str, int] = {}
@@ -1266,6 +1291,7 @@ class BGCPredictor:
             "esm_model":         self._prophet._esm_model_name if self._use_prophet else None,
             "device":             str(self._prophet.device) if self._use_prophet else "cpu",
             "n_context_genes":   len(all_gene_records) if all_gene_records is not None else len(alien_records),
+            "fisher_enrichment": fisher_stats,
         }
 
         logger.info(
