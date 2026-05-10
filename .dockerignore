@@ -16,3 +16,4 @@ logs/
 models/*.pt
 models/*.tar.gz
 .dvc
+.dev/
