@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  exocluster:
+    build: .
+    image: exocluster:latest
+    volumes:
+      - .:/app
+      - ./data:/app/data
+      - ./output:/app/output
+      - ./logs:/app/logs
+      - ./models:/app/models
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: ["--cores", "4", "--configfile", "config/default.yaml"]
