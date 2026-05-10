@@ -1,0 +1,53 @@
+name: exocluster
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  # Core data science
+  - python=3.11
+  - numpy>=1.24.0
+  - pandas>=2.0.0
+  - scipy>=1.11.0
+  - scikit-learn>=1.3.0
+  
+  # Bioinformatics
+  - biopython>=1.81
+  - bioconda::scikit-bio>=0.5.0
+  
+  # Deep Learning
+  - pytorch>=2.0.0
+  - fair-esm>=2.0.0
+  - bgc-prophet>=0.1.2
+  - lmdb>=1.4.0
+  
+  # Visualization
+  - seaborn>=0.12.0
+  - matplotlib>=3.7.0
+  - plotly>=5.15.0
+  - dna-features-viewer>=3.1.0
+  
+  # HTML Reports
+  - jinja2>=3.1.0
+  
+  # Utilities
+  - tqdm>=4.65.0
+  - loguru>=0.7.0
+  - pyyaml>=6.0
+  
+  # Testing
+  - pytest>=7.4.0
+  - pytest-cov>=4.1.0
+  
+  # Workflow Management (Snakemake)
+  - snakemake>=7.30.0
+  
+  # DVC (Data Version Control)
+  - dvc>=2.50.0
+  - dvc-gdrive>=2.0.0
+  
+  # Development tools
+  - pip
+  - black>=23.0.0
+  - flake8>=6.0.0
+  - mypy>=1.4.0
