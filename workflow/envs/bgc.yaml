@@ -1,0 +1,17 @@
+name: bgc
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.10
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=11.8
+  - pandas
+  - numpy
+  - scipy
+  - matplotlib
+  - transformers
