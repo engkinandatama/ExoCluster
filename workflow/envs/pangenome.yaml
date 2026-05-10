@@ -1,0 +1,12 @@
+name: pangenome
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.10
+  - biopython
+  - numpy
+  - pandas
+  - scipy
+  - scikit-bio
+  - mmseqs2
