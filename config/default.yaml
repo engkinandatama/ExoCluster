@@ -1,0 +1,165 @@
+# ExoCluster Configuration
+
+## Default Configuration
+
+```yaml
+# Pipeline-wide settings
+pipeline:
+  name: "ExoCluster"
+  version: "0.1.0"
+  description: "Pangenome Adaptive & Alien Biosynthetic Gene Cluster Miner"
+
+# Input paths
+paths:
+  genomes: "data/genomes"
+  annotations: "data/annotations"
+  output: "output/"
+  model_dir: "models/model"
+
+# Sample genomes for processing (used in visualization and aggregation)
+samples:
+  sample_genomes: []  # List of genome IDs to process, e.g., ["GCF_000001", "GCF_000002"]
+
+# Phase 1: Pangenome Analysis
+pangenome:
+  core_threshold: 0.95
+  accessory_threshold: 0.10
+  identity: 0.80
+  cluster_method: "kmer"  # Options: "kmer", "mmseqs2"
+  min_seq_length: 90
+
+# Phase 2: HGT Detection
+hgt:
+  contamination: 0.30
+  n_estimators: 200
+  random_state: 42
+  mge_proximity_bp: 10000
+  min_seq_length: 90
+
+# Phase 3: BGC Prediction
+bgc:
+  seed: 42
+  min_confidence: 0.25
+  use_keyword_boost: true
+  esm_model: "esm2_t6_8M_UR50D"
+  device: "auto"  # Options: "auto", "cuda", "mps", "cpu"
+  model_dir: "models/model"
+
+# ESM2 Model Selection
+esm2_models:
+  esm2_t6_8M_UR50D:
+    layers: 6
+    embed_dim: 320
+    params: "8M"
+    size_mb: 30
+    default: true
+  esm2_t12_35M_UR50D:
+    layers: 12
+    embed_dim: 480
+    params: "35M"
+    size_mb: 140
+    default: false
+  esm2_t30_150M_UR50D:
+    layers: 30
+    embed_dim: 640
+    params: "150M"
+    size_mb: 600
+    default: false
+  esm2_t33_650M_UR50D:
+    layers: 33
+    embed_dim: 1280
+    params: "650M"
+    size_mb: 2500
+    default: false
+  esm2_t36_3B_UR50D:
+    layers: 36
+    embed_dim: 2560
+    params: "3B"
+    size_mb: 11000
+    default: false
+  esm2_t48_15B_UR50D:
+    layers: 48
+    embed_dim: 5120
+    params: "15B"
+    size_mb: 60000
+    default: false
+
+# Resource allocation (for Snakemake)
+resources:
+  pangenome:
+    mem_mb: 8000
+    threads: 4
+    time: "04:00:00"
+  hgt:
+    mem_mb: 4000
+    threads: 1
+    time: "02:00:00"
+  bgc:
+    mem_mb: 16000
+    threads: 8
+    gpu: 1
+    time: "06:00:00"
+
+# Logging
+logging:
+  level: "INFO"  # Options: "DEBUG", "INFO", "WARNING", "ERROR"
+  format: "%(asctime)s [%(levelname)s] %(name)s — %(message)s"
+  file: "logs/pipeline_{time}.log"
+
+# Testing
+testing:
+  mock_data: false
+  verbose: false
+  coverage: false
+```
+
+## HPC Configuration (Slurm)
+
+```yaml
+# Override untuk HPC execution
+resources:
+  phase1:
+    mem_mb: 16000
+    threads: 8
+    time: "08:00:00"
+    partition: "highmem"
+  phase2:
+    mem_mb: 8000
+    threads: 4
+    time: "04:00:00"
+    partition: "standard"
+  phase3:
+    mem_mb: 32000
+    threads: 16
+    gpu: 1
+    gpu_type: "A100"
+    time: "12:00:00"
+    partition: "gpu"
+```
+
+## Example Usage
+
+### Local Execution
+```bash
+snakemake --cores 4 --configfile config/default.yaml
+```
+
+### HPC Execution (Slurm)
+```bash
+snakemake --profile workflow/profiles/slurm
+```
+
+### With Custom Config
+```bash
+snakemake --cores 8 --config pangenome.core_threshold=0.90 bgc.esm_model="esm2_t12_35M_UR50D"
+```
+
+### Dry Run (Test without execution)
+```bash
+snakemake --dry-run --configfile config/default.yaml
+```
+
+### Show DAG
+```bash
+snakemake --dag | dot -Tpng > workflow_dag.png
+```
