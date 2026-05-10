@@ -1,0 +1,38 @@
+Bootstrap: docker
+From: continuumio/miniconda3:latest
+
+%post
+    # Set working directory
+    cd /app
+
+    # Install system dependencies
+    apt-get update && apt-get install -y \
+        build-essential \
+        git \
+        && rm -rf /var/lib/apt/lists/*
+
+    # Install Snakemake
+    conda install -c conda-forge -c bioconda snakemake mamba
+
+    # Copy environment files (will be copied from host)
+    # This part will be handled by 'singularity build --fakeroot'
+
+    # Create environments
+    mamba env create -f /app/workflow/envs/pangenome.yaml
+    mamba env create -f /app/workflow/envs/hgt.yaml
+    mamba env create -f /app/workflow/envs/bgc.yaml
+
+    # Set environment
+    echo 'export PATH=/opt/conda/envs/pangenome/bin:$PATH' > /etc/profile.d/conda_path.sh
+
+%files
+    # This section will be populated when building
+    # Example: /path/to/local/envs /app/envs
+    /path/to/local/workflow/envs /app/workflow/envs
+    /path/to/local/config /app/config
+    /path/to/local/Snakefile /app/Snakefile
+    /path/to/local/pipeline /app/pipeline
+    /path/to/local/mock_data /app/mock_data
+
+%runscript
+    exec snakemake "$@"
