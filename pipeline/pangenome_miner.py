@@ -378,6 +378,7 @@ class PangenomeMiner:
         self._fasta_store: Dict[str, Dict[str, SeqRecord]] = {}   # strain → contig → SeqRecord
         self._matrix: Optional[pd.DataFrame] = None
         self._cluster_map: Optional[Dict[str, str]] = None
+        self.stats: Dict[str, Any] = {}  # Container for runtime statistics
 
         logger.info(
             "PangenomeMiner initialised | core_threshold=%.2f | "
@@ -621,81 +622,93 @@ class PangenomeMiner:
     # ------------------------------------------------------------------
     # Step 3 — Pangenome partitioning
     # ------------------------------------------------------------------
-def calculate_rarefaction(self, iterations: int = 10) -> np.ndarray:
-    """Calculate pangenome rarefaction curve (average unique clusters per k genomes)."""
-    if self._matrix is None:
-        raise RuntimeError("Matrix not built.")
-    n_strains = self._matrix.shape[1]
-    rarefaction_means = np.zeros(n_strains)
-    vals = self._matrix.values
-    for k in range(1, n_strains + 1):
-        counts = []
-        for _ in range(iterations):
-            indices = np.random.choice(n_strains, k, replace=False)
-            count = np.any(vals[:, indices], axis=1).sum()
-            counts.append(count)
-        rarefaction_means[k - 1] = np.mean(counts)
-    return rarefaction_means
+    def calculate_rarefaction(self, iterations: int = 10) -> np.ndarray:
+        """Calculate pangenome rarefaction curve (average unique clusters per k genomes)."""
+        if self._matrix is None:
+            raise RuntimeError("Matrix not built.")
+        n_strains = self._matrix.shape[1]
+        rarefaction_means = np.zeros(n_strains)
+        vals = self._matrix.values
+        for k in range(1, n_strains + 1):
+            counts = []
+            for _ in range(iterations):
+                indices = np.random.choice(n_strains, k, replace=False)
+                count = np.any(vals[:, indices], axis=1).sum()
+                counts.append(count)
+            rarefaction_means[k - 1] = np.mean(counts)
+        return rarefaction_means
 
-def partition_pangenome(self) -> Tuple[pd.Index, pd.Index, pd.Index]:
-    """
-    Partition the pangenome into three tiers based on strain-fraction.
-    Also calculates Heaps' Law and Rarefaction curve statistics.
-    """
-    if self._matrix is None:
-        raise RuntimeError("Matrix not built. Call build_presence_absence_matrix() first.")
+    def partition_pangenome(self) -> Tuple[pd.Index, pd.Index, pd.Index]:
+        """
+        Partition the pangenome into three tiers based on strain-fraction.
+        Also calculates Heaps' Law and Rarefaction curve statistics.
+        """
+        if self._matrix is None:
+            raise RuntimeError("Matrix not built. Call build_presence_absence_matrix() first.")
 
-    n_strains = len(self._strain_ids)
-    fraction_present = self._matrix.sum(axis=1) / n_strains
+        n_strains = len(self._strain_ids)
+        fraction_present = self._matrix.sum(axis=1) / n_strains
 
-    effective_acc = max(self.accessory_threshold, 1.0 / n_strains)
-    effective_acc = min(effective_acc, self.core_threshold - 1e-6)
+        effective_acc = max(self.accessory_threshold, 1.0 / n_strains)
+        effective_acc = min(effective_acc, self.core_threshold - 1e-6)
 
-    core_genes = self._matrix.index[fraction_present >= self.core_threshold]
-    accessory_genes = self._matrix.index[fraction_present <= effective_acc]
-    shell_genes = self._matrix.index[
-        (fraction_present > effective_acc) & (fraction_present < self.core_threshold)
-    ]
+        core_genes = self._matrix.index[fraction_present >= self.core_threshold]
+        accessory_genes = self._matrix.index[fraction_present <= effective_acc]
+        shell_genes = self._matrix.index[
+            (fraction_present > effective_acc) & (fraction_present < self.core_threshold)
+        ]
 
-    # Heaps' Law
-    n_genomes = np.arange(1, n_strains + 1)
-    unique_genes = []
-    for i in n_genomes:
-        subset = self._matrix.sample(n=i, axis=1)
-        unique_genes.append(subset.sum(axis=1).gt(0).sum())
+        # Heaps' Law
+        n_genomes = np.arange(1, n_strains + 1)
+        unique_genes = []
+        for i in n_genomes:
+            subset = self._matrix.sample(n=i, axis=1)
+            unique_genes.append(subset.sum(axis=1).gt(0).sum())
 
-    from scipy.optimize import curve_fit
-    def heaps_law(n, k, beta):
-        return k * np.power(n, beta)
-    
-    try:
-        popt, _ = curve_fit(heaps_law, n_genomes, unique_genes, p0=[1000, 0.5])
-        k, beta = popt
-        heaps_stats = {"k": float(k), "beta": float(beta), "open": beta > 0}
-    except Exception as e:
-        logger.warning("Heaps' Law calculation failed: %s", e)
-        heaps_stats = {"k": 0.0, "beta": 0.0, "open": None}
+        from scipy.optimize import curve_fit
+        def heaps_law(n, k, beta):
+            return k * np.power(n, beta)
+        
+        try:
+            # Ensure we have enough data points for fitting
+            if len(n_genomes) < 3:
+                raise ValueError("Insufficient data points for Heaps' Law fitting")
 
-    rarefaction = self.calculate_rarefaction()
+            # Use bounds to prevent unphysical values (k > 0, 0 < beta <= 1)
+            # k: intercept/scaling factor, beta: exponent
+            popt, _ = curve_fit(
+                heaps_law, 
+                n_genomes, 
+                unique_genes, 
+                p0=[max(unique_genes) / (len(n_genomes)**0.5), 0.5],
+                bounds=([1e-3, 0.001], [np.inf, 1.0])
+            )
+            k, beta = popt
+            heaps_stats = {"k": float(k), "beta": float(beta), "open": bool(beta > 0.5)}
+        except Exception as e:
+            logger.warning("Heaps' Law calculation failed (likely insufficient variance or data): %s", e)
+            heaps_stats = {"k": 0.0, "beta": 0.0, "open": None}
 
-    logger.info(
-        "Pangenome partitioning (%d strains):\n"
-        "  Core       (≥%.0f%%): %5d clusters\n"
-        "  Shell                : %5d clusters\n"
-        "  Accessory  (≤%.0f%%): %5d clusters\n"
-        "  Heaps' Law           : k=%.2f, beta=%.2f (Open=%s)",
-        n_strains,
-        self.core_threshold * 100, len(core_genes),
-        len(shell_genes),
-        effective_acc * 100, len(accessory_genes),
-        heaps_stats["k"], heaps_stats["beta"], heaps_stats["open"]
-    )
-    
-    self.stats.update({
-        "heaps_law": heaps_stats,
-        "rarefaction_curve": rarefaction.tolist()
-    })
-    return core_genes, accessory_genes, shell_genes
+        rarefaction = self.calculate_rarefaction()
+
+        logger.info(
+            "Pangenome partitioning (%d strains):\n"
+            "  Core       (≥%.0f%%): %5d clusters\n"
+            "  Shell                : %5d clusters\n"
+            "  Accessory  (≤%.0f%%): %5d clusters\n"
+            "  Heaps' Law           : k=%.2f, beta=%.2f (Open=%s)",
+            n_strains,
+            self.core_threshold * 100, len(core_genes),
+            len(shell_genes),
+            effective_acc * 100, len(accessory_genes),
+            heaps_stats["k"], heaps_stats["beta"], heaps_stats["open"]
+        )
+        
+        self.stats.update({
+            "heaps_law": heaps_stats,
+            "rarefaction_curve": rarefaction.tolist()
+        })
+        return core_genes, accessory_genes, shell_genes
 
     # ------------------------------------------------------------------
     # Step 4 — Extract accessory coordinates (output to Phase 2)

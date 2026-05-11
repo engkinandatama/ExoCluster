@@ -15,6 +15,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import random
 import pytest
@@ -246,3 +247,142 @@ class TestPangenomeMinerIntegration:
         miner = PangenomeMiner()
         with pytest.raises((RuntimeError, ValueError)):
             miner.run(genomes_dir, annot_dir)
+
+
+# ===========================================================================
+# Test rarefaction and Heaps' Law calculations
+# ===========================================================================
+
+class TestPangenomeAnalytics:
+    """Test advanced analytics: rarefaction curves and Heaps' Law."""
+
+    def test_calculate_rarefaction(self, tmp_dirs):
+        """Test rarefaction curve calculation."""
+        genomes_dir, annot_dir = tmp_dirs
+        strains = ["A", "B", "C"]
+        
+        # Build simple data
+        CONTIG_ID = "ctg1"
+        GENE_DEFS = [
+            (100, 399, "+", "gene1", "protein1", strains),  # Present in all
+            (500, 799, "-", "gene2", "protein2", ["A", "B"]),  # Present in A, B
+            (900, 1199, "+", "gene3", "protein3", ["C"]),  # Present in C only
+        ]
+        
+        from pathlib import Path
+        import random
+        rng = random.Random(42)
+        rand_seq = lambda l: "".join(rng.choices("ACGT", k=l))
+        
+        for strain in strains:
+            genome = list(rand_seq(2000))
+            gff_records = []
+            for start, end, strand, gene_id, product, shared_in in GENE_DEFS:
+                if strain not in shared_in:
+                    continue
+                seq = rand_seq(end - start + 1)
+                genome[start - 1:end] = list(seq)
+                gff_records.append((CONTIG_ID, "CDS", start, end, strand, gene_id, product))
+            
+            _write_fasta(genomes_dir / f"strain_{strain}.fasta", CONTIG_ID, "".join(genome))
+            _write_gff(annot_dir / f"strain_{strain}.gff", gff_records)
+        
+        miner = PangenomeMiner(core_threshold=0.9, accessory_threshold=0.1)
+        miner.run(genomes_dir, annot_dir)
+        
+        # Test rarefaction calculation
+        rarefaction = miner.calculate_rarefaction(iterations=5)
+        assert len(rarefaction) == 3  # 3 strains
+        assert all(rarefaction > 0)
+        # Rarefaction should be non-decreasing
+        assert all(rarefaction[i] <= rarefaction[i+1] for i in range(len(rarefaction)-1))
+
+    def test_heaps_law_calculation(self, tmp_dirs):
+        """Test Heaps' Law calculation."""
+        genomes_dir, annot_dir = tmp_dirs
+        strains = ["A", "B", "C"]
+        
+        CONTIG_ID = "ctg1"
+        # Define genes to ensure pangenome is "open"
+        GENE_DEFS = [
+            (100, 399, "+", "gene1", "protein1", strains),
+            (500, 799, "-", "gene2", "protein2", ["A", "B"]),
+            (900, 1199, "+", "gene3", "protein3", ["A", "C"]),
+            (1300, 1599, "+", "gene4", "protein4", ["B"]),
+            (1700, 1999, "+", "gene5", "protein5", ["C"]),
+        ]
+        
+        from pathlib import Path
+        import random
+        rng = random.Random(42)
+        rand_seq = lambda l: "".join(rng.choices("ACGT", k=l))
+        
+        for strain in strains:
+            genome = list(rand_seq(3000))
+            gff_records = []
+            for start, end, strand, gene_id, product, shared_in in GENE_DEFS:
+                if strain not in shared_in:
+                    continue
+                seq = rand_seq(end - start + 1)
+                genome[start - 1:end] = list(seq)
+                gff_records.append((CONTIG_ID, "CDS", start, end, strand, gene_id, product))
+            
+            _write_fasta(genomes_dir / f"strain_{strain}.fasta", CONTIG_ID, "".join(genome))
+            _write_gff(annot_dir / f"strain_{strain}.gff", gff_records)
+        
+        miner = PangenomeMiner(core_threshold=0.9, accessory_threshold=0.1)
+        miner.run(genomes_dir, annot_dir)
+        
+        # Check Heaps' Law stats
+        assert "heaps_law" in miner.stats
+        heaps = miner.stats["heaps_law"]
+        assert "k" in heaps
+        assert "beta" in heaps
+        assert "open" in heaps
+        assert isinstance(heaps["k"], (int, float))
+        assert isinstance(heaps["beta"], (int, float))
+        assert isinstance(heaps["open"], (bool, np.bool_))
+
+    def test_heaps_law_failure_handling(self, tmp_dirs, monkeypatch):
+        """Test that Heaps' Law failures are handled gracefully."""
+        genomes_dir, annot_dir = tmp_dirs
+        strains = ["A", "B"]
+        
+        CONTIG_ID = "ctg1"
+        GENE_DEFS = [
+            (100, 399, "+", "gene1", "protein1", strains),
+        ]
+        
+        from pathlib import Path
+        import random
+        rng = random.Random(42)
+        rand_seq = lambda l: "".join(rng.choices("ACGT", k=l))
+        
+        for strain in strains:
+            genome = list(rand_seq(1000))
+            gff_records = []
+            for start, end, strand, gene_id, product, shared_in in GENE_DEFS:
+                if strain not in shared_in:
+                    continue
+                seq = rand_seq(end - start + 1)
+                genome[start - 1:end] = list(seq)
+                gff_records.append((CONTIG_ID, "CDS", start, end, strand, gene_id, product))
+            
+            _write_fasta(genomes_dir / f"strain_{strain}.fasta", CONTIG_ID, "".join(genome))
+            _write_gff(annot_dir / f"strain_{strain}.gff", gff_records)
+        
+        # Force curve_fit to raise an exception to test error handling
+        def mock_curve_fit(*args, **kwargs):
+            raise RuntimeError("Simulated failure")
+        
+        monkeypatch.setattr("scipy.optimize.curve_fit", mock_curve_fit)
+        
+        miner = PangenomeMiner(core_threshold=0.9, accessory_threshold=0.1)
+        miner.run(genomes_dir, annot_dir)
+        
+        # Even if curve_fit fails, we should still have stats with defaults
+        assert "heaps_law" in miner.stats
+        heaps = miner.stats["heaps_law"]
+        assert heaps["k"] == 0.0
+        assert heaps["beta"] == 0.0
+        assert heaps["open"] is None
