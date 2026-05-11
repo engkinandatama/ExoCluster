@@ -643,7 +643,7 @@ def render_phase3_html_report(
     plot_heatmap_path: Optional[str] = None,
     plot_landscape_path: Optional[str] = None,
     max_table_rows: int = 100,
-    filename: str = "phase3_report.html",
+    filename: str = "bgc_report.html",
 ) -> str:
     """
     Render Jinja2 HTML report for Phase 3 results.
