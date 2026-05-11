@@ -237,10 +237,6 @@ def _cluster_genes_with_mmseqs2(
     RuntimeError
         If mmseqs2 is not found or fails.
     """
-    try:
-        import subprocess
-    except ImportError:
-        raise RuntimeError("subprocess module is not available, cannot run MMseqs2")
 
     logger.info(
         "Running MMseqs2 ortholog clustering on %d sequences (identity ≥ %.0f%%) …",
@@ -248,23 +244,29 @@ def _cluster_genes_with_mmseqs2(
         identity_threshold * 100,
     )
 
+    try:
+        import subprocess
+    except ImportError:
+        raise RuntimeError("subprocess module is not available, cannot run MMseqs2")
+
     if not all_records:
         return {}
 
-    temp_dir = Path(temp_dir) if temp_dir else Path(tempfile.mkdtemp())
-    temp_dir.mkdir(parents=True, exist_ok=True)
+    # Use a separate variable for Path operations to avoid type confusion
+    work_dir: Path = Path(temp_dir) if temp_dir else Path(tempfile.mkdtemp())
+    work_dir.mkdir(parents=True, exist_ok=True)
 
     # Write input FASTA
-    input_fasta = temp_dir / "input.fasta"
+    input_fasta = work_dir / "input.fasta"
     with open(input_fasta, "w") as f:
         for record in all_records:
             # Use gene_id as header, store original gene_id in description
             f.write(f">{record.gene_id}\n{record.sequence}\n")
 
     # Run MMseqs2 clustering
-    cluster_db = temp_dir / "cluster_db"
-    cluster_tsv = temp_dir / "cluster.tsv"
-    cluster_pref = temp_dir / "cluster_pref"
+    cluster_db = work_dir / "cluster_db"
+    cluster_tsv = work_dir / "cluster.tsv"
+    cluster_pref = work_dir / "cluster_pref"
 
     try:
         # Step 1: Create database
@@ -280,47 +282,39 @@ def _cluster_genes_with_mmseqs2(
                 "mmseqs",
                 "cluster",
                 str(cluster_db),
-                str(cluster_tsv),
                 str(cluster_pref),
+                str(cluster_tsv),
                 "--min-seq-id",
                 str(identity_threshold),
+                "-c",
+                "0.8",
+                "--threads",
+                "1",
             ],
             check=True,
             capture_output=True,
             text=True,
         )
-    except FileNotFoundError:
-        raise RuntimeError(
-            "mmseqs2 executable not found in PATH. Please install MMseqs2."
+        # Step 3: Create TSV file
+        subprocess.run(
+            ["mmseqs", "createtsv", str(cluster_db), str(cluster_db), str(cluster_tsv)],
+            check=True,
+            capture_output=True,
+            text=True,
         )
-    except subprocess.CalledProcessError as e:
-        logger.error("MMseqs2 clustering failed: {}", e.stderr)
-        raise RuntimeError(f"MMseqs2 failed with error: {e.stderr}") from e
 
-    # Parse MMseqs2 TSV output
-    # Format: gene_id cluster_id cluster_representative
-    cluster_map: Dict[str, str] = {}
-    try:
-        with open(cluster_tsv) as f:
+        # Parse results
+        cluster_map: Dict[str, str] = {}
+        with open(cluster_tsv, "r") as f:
             for line in f:
-                parts = line.strip().split("\t")
-                if len(parts) >= 2:
-                    gene_id = parts[0]
-                    cluster_id = parts[1]
-                    cluster_map[gene_id] = cluster_id
-    except FileNotFoundError:
-        logger.error("MMseqs2 output file not found: {}", cluster_tsv)
-        raise RuntimeError(f"MMseqs2 output file not found: {cluster_tsv}")
+                if line.strip():
+                    parts = line.strip().split("\t")
+                    if len(parts) >= 2:
+                        cluster_map[parts[0]] = parts[1]
 
-    n_clusters = len(set(cluster_map.values()))
-    logger.info(
-        "MMseqs2 clustering complete: %d genes → %d ortholog clusters",
-        len(all_records),
-        n_clusters,
-    )
-
-    # Clean up temp files
-    shutil.rmtree(temp_dir, ignore_errors=True)
+    finally:
+        # Clean up temp files
+        shutil.rmtree(work_dir, ignore_errors=True)
 
     return cluster_map
 
