@@ -140,7 +140,7 @@ def generate_mock_data(output_dir: Path) -> None:
         with gff_path.open("w") as fh:
             fh.write("\n".join(gff_lines) + "\n")
 
-        print(f"  ✓ {strain}: {len(gff_lines) - 2} CDS features written")
+        print(f"  [OK] {strain}: {len(gff_lines) - 2} CDS features written")
 
     print(f"\nMock data written to:\n  {genomes_dir}\n  {annotations_dir}")
 

@@ -25,7 +25,7 @@ pangenome:
   core_threshold: 0.95
   accessory_threshold: 0.10
   identity: 0.80
-  cluster_method: "kmer"  # Options: "kmer", "mmseqs2"
+  cluster_method: "mmseqs2"  # Options: "mmseqs2", "kmer"
   min_seq_length: 90
 
 # Phase 2: HGT Detection

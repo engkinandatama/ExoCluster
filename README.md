@@ -41,7 +41,19 @@ python main.py \
   --verbose
 ```
 
-## 🔬 Project Structure
+## � Containerized Execution
+
+ExoCluster supports containerized execution via Docker for consistency across environments:
+
+```bash
+# Build the image
+docker build -t exocluster .
+
+# Run the pipeline (via docker-compose)
+docker-compose up --build
+```
+
+## �🔬 Project Structure
 
 ```
 ExoCluster/
