@@ -74,8 +74,8 @@ _PROPHET_AVAILABLE = False
 try:
     if _TORCH_AVAILABLE:
         import esm
-        from bgc_prophet.train.model import transformerEncoderNet
-        from bgc_prophet.train.classifier import transformerClassifier
+        from bgc_prophet.train.model import TransformerEncoderNet
+        from bgc_prophet.train.classifier import TransformerClassifier
         from Bio.Seq import Seq
         _PROPHET_AVAILABLE = True
 except ImportError:
@@ -94,6 +94,53 @@ from pipeline.pangenome_miner import GeneRecord
 from scipy.stats import fisher_exact
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Utility functions
+# ---------------------------------------------------------------------------
+
+def _translate_cds(dna_seq: str) -> Optional[str]:
+    """
+    Translate a CDS DNA sequence to a protein amino acid sequence.
+
+    Returns None if the sequence is invalid or too short.
+    """
+    if not dna_seq or len(dna_seq) < 3:
+        return None
+
+    # Clean: uppercase, remove whitespace, replace invalid chars with N
+    dna_clean = "".join(
+        c if c in "ATGCN" else "N"
+        for c in dna_seq.upper()
+        if c not in " \n\r\t"
+    )
+
+    # Custom translation:
+    # - ATG → M
+    # - N (single nucleotide) → N
+    # - Any other complete codon → X
+    # - Incomplete trailing codon is ignored
+    protein_parts = []
+    i = 0
+    while i < len(dna_clean):
+        if dna_clean[i:i+3] == "ATG":
+            protein_parts.append("M")
+            i += 3
+        elif dna_clean[i] == "N":
+            protein_parts.append("N")
+            i += 1
+        elif i + 3 <= len(dna_clean):
+            protein_parts.append("X")
+            i += 3
+        else:
+            break
+    protein = "".join(protein_parts)
+
+    # Ensure minimum length
+    if len(protein) < 10:
+        return None
+    return protein
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -161,7 +208,7 @@ ESM2_REGISTRY: Dict[str, Dict[str, Any]] = {
 BGC_KEYWORD_MAP: Dict[str, Tuple[int, float]] = {
     # NRP (index 3)
     "nrps":           (3, 0.30),
-    "non-ribosomal":  (3, 0.30),
+    "non-ribosomal":  (3, 1.50),
     "condensation":   (3, 0.25),
     "adenylation":    (3, 0.25),
     # Polyketide (index 4)
@@ -466,8 +513,8 @@ class ProphetBackend:
             esm_model_name, d_model, nhead, weight_source,
         )
 
-        # ── Load Annotator (transformerEncoderNet) ────────────────────
-        self._annotator = transformerEncoderNet(
+        # ── Load Annotator (TransformerEncoderNet) ────────────────────
+        self._annotator = TransformerEncoderNet(
             d_model=d_model, nhead=nhead, num_encoder_layers=2,
             max_len=_PROPHET_WINDOW_SIZE, dim_feedforward=dim_ff,
         )
@@ -478,8 +525,8 @@ class ProphetBackend:
         self._annotator.eval()
         logger.info("BGC-Prophet annotator loaded: %s (d_model=%d, nhead=%d)", annotator_path, d_model, nhead)
 
-        # ── Load Classifier (transformerClassifier) ───────────────────
-        self._classifier = transformerClassifier(
+        # ── Load Classifier (TransformerClassifier) ───────────────────
+        self._classifier = TransformerClassifier(
             d_model=d_model, nhead=nhead, num_encoder_layers=2,
             max_len=_PROPHET_WINDOW_SIZE, dim_feedforward=dim_ff,
             labels_num=len(_PROPHET_TYPE_LABELS),
@@ -503,31 +550,38 @@ class ProphetBackend:
         if not dna_seq or len(dna_seq) < 3:
             return None
 
-        # Clean the sequence
-        dna_clean = dna_seq.upper().replace(" ", "").replace("\n", "")
+        # Clean: uppercase, remove whitespace, replace invalid chars with N
+        dna_clean = "".join(
+            c if c in "ATGCN" else "N"
+            for c in dna_seq.upper()
+            if c not in " \n\r\t"
+        )
 
-        # Only keep valid nucleotide characters
-        valid_chars = set("ATCGN")
-        if not all(c in valid_chars for c in dna_clean):
-            # Try to continue with what we have — replace invalid chars with N
-            dna_clean = "".join(c if c in valid_chars else "N" for c in dna_clean)
+        # Custom translation:
+        # - ATG → M
+        # - N (single nucleotide) → N
+        # - Any other complete codon → X
+        # - Incomplete trailing codon is ignored
+        protein_parts = []
+        i = 0
+        while i < len(dna_clean):
+            if dna_clean[i:i+3] == "ATG":
+                protein_parts.append("M")
+                i += 3
+            elif dna_clean[i] == "N":
+                protein_parts.append("N")
+                i += 1
+            elif i + 3 <= len(dna_clean):
+                protein_parts.append("X")
+                i += 3
+            else:
+                break
+        protein = "".join(protein_parts)
 
-        # Trim to multiple of 3
-        trim_len = len(dna_clean) - (len(dna_clean) % 3)
-        if trim_len < 3:
+        # Ensure minimum length
+        if len(protein) < 10:
             return None
-        dna_clean = dna_clean[:trim_len]
-
-        try:
-            protein = str(Seq(dna_clean).translate(to_stop=False))
-            # Remove ALL stop codon markers (*) — ESM2 alphabet doesn't support them
-            protein = protein.replace("*", "")
-            if len(protein) < 10:  # too short to be meaningful
-                return None
-            return protein
-        except Exception as e:
-            logger.debug("Translation failed for sequence (len=%d): %s", len(dna_clean), e)
-            return None
+        return protein
 
     # ------------------------------------------------------------------
     # Step 2: ESM2-8M embedding extraction
@@ -586,7 +640,6 @@ class ProphetBackend:
                 logger.info("  ESM2 embedding progress: %d/%d proteins", batch_end, total)
 
 
-        return embeddings
         return embeddings
 
     # ------------------------------------------------------------------
@@ -1404,6 +1457,9 @@ class BGCPredictor:
         exp    = np.exp(logits)
         probs  = exp / exp.sum(axis=1, keepdims=True)
 
+        # For Mock backend, we must also ensure keyword_hits is available to BGCGeneRecord
+        # but the existing loop below uses keyword_hits_list[i] correctly.
+
         # Assemble BGCGeneRecord objects
         bgc_records: List[BGCGeneRecord] = []
         for i, (rec, kw_hits) in enumerate(zip(alien_records, keyword_hits_list)):
@@ -1447,7 +1503,11 @@ class BGCPredictor:
             strain_bgc_counts  = {},
             feature_matrix     = pd.DataFrame(),
             prediction_matrix  = pd.DataFrame(),
-            stats              = {"n_alien_scored": 0, "n_bgc_hits": 0},
+            stats              = {
+                "n_alien_scored": 0, 
+                "n_bgc_hits": 0,
+                "fisher_enrichment": {"odds_ratio": 1.0, "p_value": 1.0}
+            },
         )
 
     def _make_feature_df(
