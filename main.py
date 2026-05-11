@@ -24,19 +24,19 @@ import sys
 from pathlib import Path
 
 from pipeline.pangenome_miner import PangenomeMiner, PangenomeResult
-from pipeline.phase1_visualizer import (
+from pipeline.pangenome_visualizer import (
     plot_presence_absence_heatmap,
     plot_pangenome_summary,
     render_phase1_html_report,
 )
 from pipeline.hgt_detective import HGTDetective, HGTResult
-from pipeline.phase2_visualizer import (
+from pipeline.hgt_visualizer import (
     plot_genomic_island_architecture,
     plot_hgt_feature_distributions,
     render_phase2_html_report,
 )
 from pipeline.bgc_predictor import BGCPredictor, BGCResult
-from pipeline.phase3_visualizer import (
+from pipeline.bgc_visualizer import (
     plot_phase3_decision_funnel,
     plot_bgc_neighborhood_map,
     plot_bgc_class_distribution,
@@ -86,6 +86,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Ortholog clustering sequence-identity threshold (default: 0.80).",
     )
     parser.add_argument(
+        "--cluster-method", type=str, default="mmseqs2",
+        choices=["kmer", "mmseqs2"],
+        help="Ortholog clustering method (default: mmseqs2).",
+    )
+    parser.add_argument(
         "--mock", action="store_true",
         help="Generate and use synthetic mock data for testing.",
     )
@@ -128,17 +133,18 @@ def run_phase1(args: argparse.Namespace) -> tuple[PangenomeResult, PangenomeMine
         core_threshold=args.core_threshold,
         accessory_threshold=args.accessory_threshold,
         identity_threshold=args.identity,
+        cluster_method=args.cluster_method,
     )
 
     result: PangenomeResult = miner.run(args.genomes, args.annotations)
 
     # Persist matrix
-    matrix_out = args.output / "phase1_presence_absence_matrix.csv"
+    matrix_out = args.output / "pangenome_presence_absence_matrix.csv"
     miner.save_matrix(matrix_out)
 
     # Phase 1 Visualizations
-    logger.info("Generating Phase 1 visualizations …")
-    p1_dir = args.output / "phase1"
+    logger.info("Generating Pangenome visualizations …")
+    p1_dir = args.output / "pangenome"
     p1_dir.mkdir(parents=True, exist_ok=True)
 
     heatmap_path = plot_presence_absence_heatmap(
@@ -155,7 +161,7 @@ def run_phase1(args: argparse.Namespace) -> tuple[PangenomeResult, PangenomeMine
         accessory_records=result.accessory_records,
         heatmap_path=heatmap_path,
         summary_chart_path=summary_chart_path,
-        output_path=p1_dir / "phase1_report.html",
+        output_path=p1_dir / "pangenome_report.html",
     )
 
     stats = result.stats
@@ -187,8 +193,8 @@ def run_phase2(phase1_result: PangenomeResult, miner: PangenomeMiner, args: argp
     hgt_result = detective.run(phase1_result=phase1_result, fasta_store=miner._fasta_store)
 
     # Phase 2 Visualizations
-    logger.info("Generating Phase 2 visualizations …")
-    p2_dir = args.output / "phase2"
+    logger.info("Generating HGT visualizations …")
+    p2_dir = args.output / "hgt"
     p2_dir.mkdir(parents=True, exist_ok=True)
 
     genomic_plot_paths = {}
@@ -211,7 +217,7 @@ def run_phase2(phase1_result: PangenomeResult, miner: PangenomeMiner, args: argp
         hgt_result=hgt_result,
         genomic_plot_paths=genomic_plot_paths,
         feature_dist_path=feat_dist_path,
-        output_path=p2_dir / "phase2_report.html",
+        output_path=p2_dir / "hgt_report.html",
     )
 
     stats = hgt_result.stats
@@ -244,8 +250,8 @@ def run_phase3(
     bgc_result = predictor.run(hgt_result, all_gene_records=all_gene_records)
 
     # Phase 3 Visualizations
-    logger.info("Generating Phase 3 visualizations ...")
-    p3_dir = args.output / "phase3"
+    logger.info("Generating BGC visualizations ...")
+    p3_dir = args.output / "bgc"
     p3_dir.mkdir(parents=True, exist_ok=True)
     funnel_path = plot_phase3_decision_funnel(
         bgc_result=bgc_result,

@@ -1,8 +1,3 @@
-# ExoCluster Configuration
-
-## Default Configuration
-
-```yaml
 # Pipeline-wide settings
 pipeline:
   name: "ExoCluster"
@@ -111,55 +106,3 @@ testing:
   mock_data: false
   verbose: false
   coverage: false
-```
-
-## HPC Configuration (Slurm)
-
-```yaml
-# Override untuk HPC execution
-resources:
-  phase1:
-    mem_mb: 16000
-    threads: 8
-    time: "08:00:00"
-    partition: "highmem"
-  phase2:
-    mem_mb: 8000
-    threads: 4
-    time: "04:00:00"
-    partition: "standard"
-  phase3:
-    mem_mb: 32000
-    threads: 16
-    gpu: 1
-    gpu_type: "A100"
-    time: "12:00:00"
-    partition: "gpu"
-```
-
-## Example Usage
-
-### Local Execution
-```bash
-snakemake --cores 4 --configfile config/default.yaml
-```
-
-### HPC Execution (Slurm)
-```bash
-snakemake --profile workflow/profiles/slurm
-```
-
-### With Custom Config
-```bash
-snakemake --cores 8 --config pangenome.core_threshold=0.90 bgc.esm_model="esm2_t12_35M_UR50D"
-```
-
-### Dry Run (Test without execution)
-```bash
-snakemake --dry-run --configfile config/default.yaml
-```
-
-### Show DAG
-```bash
-snakemake --dag | dot -Tpng > workflow_dag.png
-```
