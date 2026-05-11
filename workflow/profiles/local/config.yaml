@@ -1,0 +1,49 @@
+# Snakemake local execution profile
+# For running workflows on local machine with resource constraints
+
+# Number of threads to use (set to number of CPU cores or lower for shared environments)
+cores: 4
+# Resource requests for local execution
+# These are used by the local executor to limit resources per job
+default-resources:
+    threads: 1
+    mem_mb: 4000
+    runtime: 3600
+
+# Set to true to rerun incomplete jobs
+restart-times: 0
+
+
+# Set to true to allow infinite soft resources (needed for some clusters)
+# infinite-soft-resources: false
+
+# Set to true to show shell commands in output
+printshellcmds: true
+
+# Set to true to reason about missing input files as if they were present
+# This is useful for cluster execution where files might not be present on the submit node
+# allow-ambiguous-rules: true
+
+# Set the directory where to store Snakemake runtime information
+# directory: .snakemake
+
+# Set to true to not adjust the path of given files, e.g. for cluster execution
+# notemp: false
+
+# Set to true to disable the debug mode
+# nodrop: false
+
+# Set to true to not print the DAG
+# quiet: false
+
+# Set to true to not lock the workflow (not recommended)
+# unlock: false
+
+# Set to true to not use the scheduler (not recommended)
+# nosched: false
+
+# Set to true to not print the DAG
+# quiet: false
+
+# Set to true to not print the DAG
+# quiet: false

@@ -1,0 +1,45 @@
+# Snakemake Slurm execution profile
+# For running workflows on a Slurm cluster
+
+# Cluster configuration for Snakemake
+cluster: "sbatch --job-name={rulename} --output=slurm-{rulename}-%j.out --error=slurm-{rulename}-%j.err --cpus-per-task={threads} --mem={resources.mem_mb} --time={resources.runtime}"
+
+# Default resources for jobs (can be overridden in Snakefile)
+default-resources:
+    threads: 1
+    mem_mb: 4000
+    runtime: 3600
+
+# Max number of jobs to submit at once to the cluster
+# Set to a reasonable number to avoid overwhelming the scheduler
+max-jobs-per-second: 10
+max-status-checks-per-second: 10
+# Number of minutes to wait between checking for finished jobs
+cluster-status: "sacct -j {jobid} --format State --noheader --parsable2"
+
+# Set to true to not adjust the path of given files, e.g. for cluster execution
+notemp: false
+
+# Set the directory where to store Snakemake runtime information
+directory: .snakemake
+
+# Set to true to allow infinite soft resources (needed for some clusters)
+# infinite-soft-resources: false
+
+# Set to true to show shell commands in output
+printshellcmds: true
+
+# Set to true to reason about missing input files as if they were present
+# allow-ambiguous-rules: true
+
+# Set to true to rerun incomplete jobs
+restart-times: 0
+
+# Set to true to not lock the workflow (not recommended)
+# unlock: false
+
+# Set to true to not use the scheduler (not recommended)
+# nosched: false
+
+# Set to true to not print the DAG
+# quiet: false

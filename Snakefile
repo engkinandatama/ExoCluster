@@ -34,11 +34,11 @@ rule all:
         f"{OUTPUT_DIR}/pangenome/visualization/pangenome_plot.html",
         
         # HGT outputs
-        f"{OUTPUT_DIR}/hgt/hgt_predictions.csv",
+        expand(f"{OUTPUT_DIR}/hgt/hgt_predictions_{{genome_id}}.csv", genome_id=config["samples"]["sample_genomes"]),
         f"{OUTPUT_DIR}/hgt/visualization/hgt_plot.html",
         
         # BGC outputs
-        f"{OUTPUT_DIR}/bgc/bgc_predictions.csv",
+        expand(f"{OUTPUT_DIR}/bgc/bgc_predictions_{{genome_id}}.csv", genome_id=config["samples"]["sample_genomes"]),
         f"{OUTPUT_DIR}/bgc/visualization/bgc_plot.html",
         f"{OUTPUT_DIR}/bgc/reports/final_report.html",
 
@@ -46,9 +46,13 @@ rule all:
         "ExoCluster pipeline completed successfully!"
 
 rule pangenome:
+    # Resource Requirements:
+    # - RAM: ~8GB (can increase for >100 genomes)
+    # - CPU: 4 threads
+    # - Time: ~4 hours
     input:
-        genomes = f"{GENOMES_DIR}/{{genome_id}}.fasta",
-        annotations = f"{ANNOTATIONS_DIR}/{{genome_id}}.gff"
+        genomes = expand(f"{GENOMES_DIR}/{{genome_id}}.fasta", genome_id=config["samples"]["sample_genomes"]),
+        annotations = expand(f"{ANNOTATIONS_DIR}/{{genome_id}}.gff", genome_id=config["samples"]["sample_genomes"])
     output:
         matrix = f"{OUTPUT_DIR}/pangenome/pangenome_matrix.csv",
         stats = f"{OUTPUT_DIR}/pangenome/pangenome_stats.json"
@@ -65,7 +69,7 @@ rule pangenome:
         mem_mb = config["resources"]["pangenome"]["mem_mb"],
         time = config["resources"]["pangenome"]["time"]
     log:
-        f"{OUTPUT_DIR}/pangenome/logs/pangenome_{{wildcards.genome_id}}.log"
+        f"{OUTPUT_DIR}/pangenome/logs/pangenome_all.log"
     shell:
         """
         python workflow/scripts/run_pangenome.py \
@@ -82,6 +86,10 @@ rule pangenome:
         """
 
 rule hgt:
+    # Resource Requirements:
+    # - RAM: ~4GB
+    # - CPU: 1 thread
+    # - Time: ~2 hours (per genome)
     input:
         genome = f"{GENOMES_DIR}/{{genome_id}}.fasta",
         annotations = f"{ANNOTATIONS_DIR}/{{genome_id}}.gff",
@@ -101,7 +109,7 @@ rule hgt:
         mem_mb = config["resources"]["hgt"]["mem_mb"],
         time = config["resources"]["hgt"]["time"]
     log:
-        f"{OUTPUT_DIR}/hgt/logs/hgt_{{wildcards.genome_id}}.log"
+        f"{OUTPUT_DIR}/hgt/logs/hgt_{{genome_id}}.log"
     shell:
         """
         python workflow/scripts/run_hgt.py \
@@ -118,6 +126,11 @@ rule hgt:
         """
 
 rule bgc:
+    # Resource Requirements:
+    # - RAM: ~16GB
+    # - CPU: 8 threads
+    # - GPU: 1 (required for ESM2 inference)
+    # - Time: ~6 hours
     input:
         genome = f"{GENOMES_DIR}/{{genome_id}}.fasta",
         annotations = f"{ANNOTATIONS_DIR}/{{genome_id}}.gff",
@@ -140,7 +153,7 @@ rule bgc:
         time = config["resources"]["bgc"]["time"],
         gpu = config["resources"]["bgc"]["gpu"]
     log:
-        f"{OUTPUT_DIR}/bgc/logs/bgc_{{wildcards.genome_id}}.log"
+        f"{OUTPUT_DIR}/bgc/logs/bgc_{{genome_id}}.log"
     shell:
         """
         python workflow/scripts/run_bgc.py \
