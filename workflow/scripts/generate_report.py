@@ -3,14 +3,15 @@ import sys
 from pathlib import Path
 from loguru import logger
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--pangenome-plot", required=True)
     parser.add_argument("--hgt-plot", required=True)
     parser.add_argument("--bgc-plot", required=True)
     parser.add_argument("--pangenome-stats", required=True)
-    parser.add_argument("--hgt-predictions", nargs='+', required=True)
-    parser.add_argument("--bgc-predictions", nargs='+', required=True)
+    parser.add_argument("--hgt-predictions", nargs="+", required=True)
+    parser.add_argument("--bgc-predictions", nargs="+", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--pipeline-name", required=True)
     parser.add_argument("--pipeline-version", required=True)
@@ -18,11 +19,11 @@ def main():
     args = parser.parse_args()
 
     logger.info("Generating final unified report...")
-    
+
     try:
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Simple HTML report generation
         html_content = f"""
         <html>
@@ -60,14 +61,15 @@ def main():
         </body>
         </html>
         """
-        
-        with open(output_path, 'w', encoding='utf-8') as f:
+
+        with open(output_path, "w", encoding="utf-8") as f:
             f.write(html_content)
-            
+
         logger.info(f"Final report generated at {args.output}")
     except Exception as e:
         logger.error(f"Report generation failed: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

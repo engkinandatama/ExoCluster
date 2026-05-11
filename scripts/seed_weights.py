@@ -54,16 +54,16 @@ from torch.utils.data import DataLoader, Dataset, random_split
 # NOTE: 8M is excluded — it uses official BGC-Prophet weights (nhead=3) at
 # models/model/ root. This script only seeds weights for larger ESM2 models.
 ESM2_REGISTRY: dict[str, dict] = {
-    "esm2_t12_35M_UR50D":  {"embed_dim": 480,  "params": "35M"},
-    "esm2_t30_150M_UR50D": {"embed_dim": 640,  "params": "150M"},
+    "esm2_t12_35M_UR50D": {"embed_dim": 480, "params": "35M"},
+    "esm2_t30_150M_UR50D": {"embed_dim": 640, "params": "150M"},
     "esm2_t33_650M_UR50D": {"embed_dim": 1280, "params": "650M"},
 }
 
 # BGC-Prophet architecture constants — fixed for all model sizes
-WINDOW_SIZE = 128        # proteins per window
-NUM_CLASSES = 7          # BGC class labels (matches _PROPHET_TYPE_LABELS)
-NHEAD = 5                # attention heads (embed_dim must be divisible by 5)
-NUM_ENCODER_LAYERS = 2   # transformer encoder depth
+WINDOW_SIZE = 128  # proteins per window
+NUM_CLASSES = 7  # BGC class labels (matches _PROPHET_TYPE_LABELS)
+NHEAD = 5  # attention heads (embed_dim must be divisible by 5)
+NUM_ENCODER_LAYERS = 2  # transformer encoder depth
 
 logging.basicConfig(
     level=logging.INFO,
@@ -76,6 +76,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Synthetic dataset
 # ---------------------------------------------------------------------------
+
 
 class SyntheticBGCDataset(Dataset):
     """Random tensors shaped exactly like real BGC-Prophet training windows.
@@ -94,7 +95,9 @@ class SyntheticBGCDataset(Dataset):
         n_neg = n_windows - n_pos
 
         # Embeddings: (N, WINDOW_SIZE, embed_dim)
-        emb = rng.standard_normal((n_windows, WINDOW_SIZE, embed_dim)).astype(np.float32)
+        emb = rng.standard_normal((n_windows, WINDOW_SIZE, embed_dim)).astype(
+            np.float32
+        )
 
         # Padding masks: first 32-128 tokens real (0), rest padded (1)
         pad_masks = np.ones((n_windows, WINDOW_SIZE), dtype=np.float32)
@@ -143,6 +146,7 @@ class SyntheticBGCDataset(Dataset):
 # Training helpers
 # ---------------------------------------------------------------------------
 
+
 def train_annotator(
     model: nn.Module,
     train_loader: DataLoader,
@@ -172,8 +176,8 @@ def train_annotator(
             pad_mask = pad_mask.to(device)
 
             optimizer.zero_grad()
-            out = model(emb)             # (B, W) — no mask arg
-            real = (pad_mask == 0)
+            out = model(emb)  # (B, W) — no mask arg
+            real = pad_mask == 0
             if real.sum() == 0:
                 continue
             loss = criterion(out[real], binary[real])
@@ -192,14 +196,20 @@ def train_annotator(
                 binary = binary.to(device)
                 pad_mask = pad_mask.to(device)
                 out = model(emb)
-                real = (pad_mask == 0)
+                real = pad_mask == 0
                 if real.sum() == 0:
                     continue
                 val_loss += criterion(out[real], binary[real]).item()
 
         avg_train = train_loss / max(len(train_loader), 1)
         avg_val = val_loss / max(len(val_loader), 1)
-        logger.info("[Annotator] Epoch %3d/%d  train=%.4f  val=%.4f", epoch, epochs, avg_train, avg_val)
+        logger.info(
+            "[Annotator] Epoch %3d/%d  train=%.4f  val=%.4f",
+            epoch,
+            epochs,
+            avg_train,
+            avg_val,
+        )
 
         if avg_val < best_val:
             best_val = avg_val
@@ -224,7 +234,7 @@ def train_classifier(
     """
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
-    criterion = nn.BCELoss()   # model already applies Sigmoid
+    criterion = nn.BCELoss()  # model already applies Sigmoid
     best_val = float("inf")
 
     model.to(device)
@@ -241,7 +251,7 @@ def train_classifier(
             pad_mask = pad_mask[pos_idx].to(device)
 
             optimizer.zero_grad()
-            out = model(emb, pad_mask.bool())   # (B, NUM_CLASSES)
+            out = model(emb, pad_mask.bool())  # (B, NUM_CLASSES)
             loss = criterion(out, class_labels)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -267,43 +277,66 @@ def train_classifier(
                 n_val += 1
 
         avg_train = train_loss / max(n_batches, 1)
-        avg_val   = val_loss   / max(n_val,     1)
-        logger.info("[Classifier] Epoch %3d/%d  train=%.4f  val=%.4f", epoch, epochs, avg_train, avg_val)
+        avg_val = val_loss / max(n_val, 1)
+        logger.info(
+            "[Classifier] Epoch %3d/%d  train=%.4f  val=%.4f",
+            epoch,
+            epochs,
+            avg_train,
+            avg_val,
+        )
 
         if avg_val < best_val:
             best_val = avg_val
             torch.save(model.state_dict(), save_path)
-            logger.info("  ✓ Saved best classifier (val=%.4f) → %s", best_val, save_path)
+            logger.info(
+                "  ✓ Saved best classifier (val=%.4f) → %s", best_val, save_path
+            )
 
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Seed BGC-Prophet weights from synthetic data (no internet required).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="\n".join([
-            "Examples:",
-            "  python scripts/seed_weights.py                          # 35M (default)",
-            "  python scripts/seed_weights.py --model esm2_t12_35M_UR50D",
-            "  python scripts/seed_weights.py --model esm2_t30_150M_UR50D",
-            "  python scripts/seed_weights.py --model esm2_t33_650M_UR50D",
-        ]),
+        epilog="\n".join(
+            [
+                "Examples:",
+                "  python scripts/seed_weights.py                          # 35M (default)",
+                "  python scripts/seed_weights.py --model esm2_t12_35M_UR50D",
+                "  python scripts/seed_weights.py --model esm2_t30_150M_UR50D",
+                "  python scripts/seed_weights.py --model esm2_t33_650M_UR50D",
+            ]
+        ),
     )
     p.add_argument(
-        "--model", type=str, default="esm2_t12_35M_UR50D",
+        "--model",
+        type=str,
+        default="esm2_t12_35M_UR50D",
         choices=list(ESM2_REGISTRY.keys()),
         help="ESM2 model to seed weights for (default: esm2_t12_35M_UR50D).",
     )
-    p.add_argument("--epochs",    type=int,   default=10,  help="Training epochs (default: 10)")
-    p.add_argument("--n-windows", type=int,   default=100, help="Synthetic windows to generate (default: 100)")
-    p.add_argument("--batch-size",type=int,   default=8,   help="Batch size (default: 8)")
-    p.add_argument("--lr",        type=float, default=1e-4,help="Learning rate (default: 1e-4)")
-    p.add_argument("--seed",      type=int,   default=42,  help="Random seed (default: 42)")
     p.add_argument(
-        "--output-dir", type=Path,
+        "--epochs", type=int, default=10, help="Training epochs (default: 10)"
+    )
+    p.add_argument(
+        "--n-windows",
+        type=int,
+        default=100,
+        help="Synthetic windows to generate (default: 100)",
+    )
+    p.add_argument("--batch-size", type=int, default=8, help="Batch size (default: 8)")
+    p.add_argument(
+        "--lr", type=float, default=1e-4, help="Learning rate (default: 1e-4)"
+    )
+    p.add_argument("--seed", type=int, default=42, help="Random seed (default: 42)")
+    p.add_argument(
+        "--output-dir",
+        type=Path,
         default=Path(__file__).parent.parent / "models" / "model",
         help="Root model directory (default: models/model)",
     )
@@ -339,12 +372,12 @@ def main() -> None:
     # Output paths
     out_dir = args.output_dir / args.model
     out_dir.mkdir(parents=True, exist_ok=True)
-    annotator_path  = out_dir / "annotator.pt"
+    annotator_path = out_dir / "annotator.pt"
     classifier_path = out_dir / "classifier.pt"
 
     # Import BGC-Prophet model classes
     try:
-        from bgc_prophet.train.model      import transformerEncoderNet
+        from bgc_prophet.train.model import transformerEncoderNet
         from bgc_prophet.train.classifier import transformerClassifier
     except ImportError as exc:
         logger.error("bgc_prophet package not found: %s", exc)
@@ -352,25 +385,42 @@ def main() -> None:
         sys.exit(1)
 
     # Dataset
-    logger.info("Generating %d synthetic windows (embed_dim=%d) …", args.n_windows, embed_dim)
-    dataset = SyntheticBGCDataset(n_windows=args.n_windows, embed_dim=embed_dim, seed=args.seed)
-    val_size   = max(1, int(len(dataset) * 0.2))
+    logger.info(
+        "Generating %d synthetic windows (embed_dim=%d) …", args.n_windows, embed_dim
+    )
+    dataset = SyntheticBGCDataset(
+        n_windows=args.n_windows, embed_dim=embed_dim, seed=args.seed
+    )
+    val_size = max(1, int(len(dataset) * 0.2))
     train_size = len(dataset) - val_size
     train_ds, val_ds = random_split(
-        dataset, [train_size, val_size],
+        dataset,
+        [train_size, val_size],
         generator=torch.Generator().manual_seed(args.seed),
     )
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True,  drop_last=False)
-    val_loader   = DataLoader(val_ds,   batch_size=args.batch_size, shuffle=False)
+    train_loader = DataLoader(
+        train_ds, batch_size=args.batch_size, shuffle=True, drop_last=False
+    )
+    val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False)
 
     # ── Annotator ──────────────────────────────────────────────────────────
     logger.info("Training annotator …")
     annotator = transformerEncoderNet(
-        d_model=embed_dim, nhead=NHEAD,
+        d_model=embed_dim,
+        nhead=NHEAD,
         num_encoder_layers=NUM_ENCODER_LAYERS,
-        max_len=WINDOW_SIZE, dim_feedforward=dim_ff,
+        max_len=WINDOW_SIZE,
+        dim_feedforward=dim_ff,
     )
-    train_annotator(annotator, train_loader, val_loader, device, args.epochs, args.lr, annotator_path)
+    train_annotator(
+        annotator,
+        train_loader,
+        val_loader,
+        device,
+        args.epochs,
+        args.lr,
+        annotator_path,
+    )
     del annotator
     if device.type in ("cuda", "mps"):
         torch.cuda.empty_cache() if device.type == "cuda" else None
@@ -378,12 +428,22 @@ def main() -> None:
     # ── Classifier ─────────────────────────────────────────────────────────
     logger.info("Training classifier …")
     classifier = transformerClassifier(
-        d_model=embed_dim, nhead=NHEAD,
+        d_model=embed_dim,
+        nhead=NHEAD,
         num_encoder_layers=NUM_ENCODER_LAYERS,
-        max_len=WINDOW_SIZE, dim_feedforward=dim_ff,
+        max_len=WINDOW_SIZE,
+        dim_feedforward=dim_ff,
         labels_num=NUM_CLASSES,
     )
-    train_classifier(classifier, train_loader, val_loader, device, args.epochs, args.lr, classifier_path)
+    train_classifier(
+        classifier,
+        train_loader,
+        val_loader,
+        device,
+        args.epochs,
+        args.lr,
+        classifier_path,
+    )
     del classifier
     if device.type == "cuda":
         torch.cuda.empty_cache()
@@ -397,7 +457,8 @@ def main() -> None:
     logger.info("Run the pipeline with:")
     logger.info(
         "  python main.py --mock --esm-model %s --model-dir %s",
-        args.model, args.output_dir,
+        args.model,
+        args.output_dir,
     )
 
 

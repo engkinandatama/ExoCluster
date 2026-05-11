@@ -48,15 +48,16 @@ from dataclasses import dataclass, field
 @dataclass
 class GeneRecord:
     """Lightweight representation of a single annotated gene locus."""
-    gene_id: str           # Unique identifier (from GFF attributes or constructed)
-    strain_id: str         # Which genome/strain this gene belongs to
-    contig: str            # Contig / chromosome name
-    start: int             # 1-based genomic start coordinate
-    end: int               # 1-based genomic end coordinate
-    strand: str            # '+', '-', or '.'
-    feature_type: str      # CDS, gene, mRNA, …
-    product: str = ""      # Functional annotation (if present)
-    sequence: str = ""     # Nucleotide sequence (populated later if FASTA given)
+
+    gene_id: str  # Unique identifier (from GFF attributes or constructed)
+    strain_id: str  # Which genome/strain this gene belongs to
+    contig: str  # Contig / chromosome name
+    start: int  # 1-based genomic start coordinate
+    end: int  # 1-based genomic end coordinate
+    strand: str  # '+', '-', or '.'
+    feature_type: str  # CDS, gene, mRNA, …
+    product: str = ""  # Functional annotation (if present)
+    sequence: str = ""  # Nucleotide sequence (populated later if FASTA given)
 
     @property
     def length(self) -> int:
@@ -66,10 +67,11 @@ class GeneRecord:
 @dataclass
 class PangenomeResult:
     """Container for all Phase-1 outputs handed to Phase-2."""
-    presence_absence_matrix: pd.DataFrame      # genes × strains (bool)
-    core_genes: pd.Index                        # gene_ids present in > core_threshold
-    accessory_genes: pd.Index                   # gene_ids present in < accessory_threshold
-    accessory_records: List[GeneRecord]         # Full GeneRecord objects for accessory genes
+
+    presence_absence_matrix: pd.DataFrame  # genes × strains (bool)
+    core_genes: pd.Index  # gene_ids present in > core_threshold
+    accessory_genes: pd.Index  # gene_ids present in < accessory_threshold
+    accessory_records: List[GeneRecord]  # Full GeneRecord objects for accessory genes
     strain_ids: List[str]
     stats: Dict[str, Any] = field(default_factory=dict)
 
@@ -77,6 +79,7 @@ class PangenomeResult:
 # ===========================================================================
 # Helper utilities (private)
 # ===========================================================================
+
 
 def _parse_gff_attributes(attr_str: str) -> Dict[str, str]:
     """
@@ -157,13 +160,17 @@ def _cluster_genes_by_sequence_identity(
     )
 
     def _kmer_set(seq: str, k: int = 4) -> set:
-        return {seq[i: i + k] for i in range(len(seq) - k + 1)} if len(seq) >= k else set()
+        return (
+            {seq[i : i + k] for i in range(len(seq) - k + 1)}
+            if len(seq) >= k
+            else set()
+        )
 
     # Build kmer sets once
     kmer_sets: Dict[str, set] = {r.gene_id: _kmer_set(r.sequence) for r in all_records}
 
-    cluster_map: Dict[str, str] = {}          # gene_id → centroid gene_id
-    centroids: List[str] = []                 # ordered list of cluster centroids
+    cluster_map: Dict[str, str] = {}  # gene_id → centroid gene_id
+    centroids: List[str] = []  # ordered list of cluster centroids
 
     for record in all_records:
         gid = record.gene_id
@@ -188,7 +195,7 @@ def _cluster_genes_by_sequence_identity(
                 break
 
         if not assigned:
-            cluster_map[gid] = gid          # becomes a new centroid
+            cluster_map[gid] = gid  # becomes a new centroid
             centroids.append(gid)
 
     n_clusters = len(set(cluster_map.values()))
@@ -263,16 +270,29 @@ def _cluster_genes_with_mmseqs2(
         # Step 1: Create database
         subprocess.run(
             ["mmseqs", "createdb", str(input_fasta), str(cluster_db)],
-            check=True, capture_output=True, text=True
+            check=True,
+            capture_output=True,
+            text=True,
         )
         # Step 2: Cluster
         subprocess.run(
-            ["mmseqs", "cluster", str(cluster_db), str(cluster_tsv), str(cluster_pref),
-             "--min-seq-id", str(identity_threshold)],
-            check=True, capture_output=True, text=True
+            [
+                "mmseqs",
+                "cluster",
+                str(cluster_db),
+                str(cluster_tsv),
+                str(cluster_pref),
+                "--min-seq-id",
+                str(identity_threshold),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
         )
     except FileNotFoundError:
-        raise RuntimeError("mmseqs2 executable not found in PATH. Please install MMseqs2.")
+        raise RuntimeError(
+            "mmseqs2 executable not found in PATH. Please install MMseqs2."
+        )
     except subprocess.CalledProcessError as e:
         logger.error("MMseqs2 clustering failed: {}", e.stderr)
         raise RuntimeError(f"MMseqs2 failed with error: {e.stderr}") from e
@@ -308,6 +328,7 @@ def _cluster_genes_with_mmseqs2(
 # ===========================================================================
 # Main Class
 # ===========================================================================
+
 
 class PangenomeMiner:
     """
@@ -352,7 +373,9 @@ class PangenomeMiner:
         if not (0.0 < core_threshold <= 1.0):
             raise ValueError(f"core_threshold must be in (0, 1], got {core_threshold}")
         if not (0.0 <= accessory_threshold < 1.0):
-            raise ValueError(f"accessory_threshold must be in [0, 1), got {accessory_threshold}")
+            raise ValueError(
+                f"accessory_threshold must be in [0, 1), got {accessory_threshold}"
+            )
         if accessory_threshold >= core_threshold:
             raise ValueError(
                 f"accessory_threshold ({accessory_threshold}) must be < "
@@ -362,20 +385,26 @@ class PangenomeMiner:
         self.core_threshold = core_threshold
         self.accessory_threshold = accessory_threshold
         if not (0.0 < identity_threshold <= 1.0):
-            raise ValueError(f"identity_threshold must be in (0, 1], got {identity_threshold}")
+            raise ValueError(
+                f"identity_threshold must be in (0, 1], got {identity_threshold}"
+            )
         self.identity_threshold = identity_threshold
         self.feature_types = set(feature_types or ["CDS"])
         self.min_gene_length = min_gene_length
-        
+
         valid_methods = ["kmer", "mmseqs2"]
         if cluster_method not in valid_methods:
-            raise ValueError(f"cluster_method must be one of {valid_methods}, got {cluster_method}")
+            raise ValueError(
+                f"cluster_method must be one of {valid_methods}, got {cluster_method}"
+            )
         self.cluster_method = cluster_method
 
         # Internal state (populated during pipeline run)
         self._strain_ids: List[str] = []
         self._all_records: List[GeneRecord] = []
-        self._fasta_store: Dict[str, Dict[str, SeqRecord]] = {}   # strain → contig → SeqRecord
+        self._fasta_store: Dict[str, Dict[str, SeqRecord]] = (
+            {}
+        )  # strain → contig → SeqRecord
         self._matrix: Optional[pd.DataFrame] = None
         self._cluster_map: Optional[Dict[str, str]] = None
         self.stats: Dict[str, Any] = {}  # Container for runtime statistics
@@ -413,7 +442,9 @@ class PangenomeMiner:
         if not genomes_dir.is_dir():
             raise FileNotFoundError(f"Genomes directory not found: {genomes_dir}")
         if not annotations_dir.is_dir():
-            raise FileNotFoundError(f"Annotations directory not found: {annotations_dir}")
+            raise FileNotFoundError(
+                f"Annotations directory not found: {annotations_dir}"
+            )
 
         # Build index of available GFF files by stem
         gff_index: Dict[str, Path] = {}
@@ -431,7 +462,8 @@ class PangenomeMiner:
                 stem = fasta_path.stem
                 if stem not in gff_index:
                     logger.warning(
-                        "FASTA file '%s' has no matching GFF annotation — skipping.", stem
+                        "FASTA file '%s' has no matching GFF annotation — skipping.",
+                        stem,
                     )
                     continue
 
@@ -440,8 +472,7 @@ class PangenomeMiner:
 
                 # Parse FASTA
                 fasta_records = {
-                    rec.id: rec
-                    for rec in SeqIO.parse(fasta_path, "fasta")
+                    rec.id: rec for rec in SeqIO.parse(fasta_path, "fasta")
                 }
                 self._fasta_store[strain_id] = fasta_records
 
@@ -488,7 +519,7 @@ class PangenomeMiner:
         - Sequences are extracted from *fasta_records* if available.
         """
         records: List[GeneRecord] = []
-        seen_ids: Dict[str, int] = defaultdict(int)   # handle duplicate IDs
+        seen_ids: Dict[str, int] = defaultdict(int)  # handle duplicate IDs
 
         try:
             with gff_path.open("r", encoding="utf-8", errors="replace") as fh:
@@ -501,11 +532,23 @@ class PangenomeMiner:
                     if len(cols) < 9:
                         logger.debug(
                             "%s:%d — expected 9 columns, got %d; skipping.",
-                            gff_path.name, lineno, len(cols)
+                            gff_path.name,
+                            lineno,
+                            len(cols),
                         )
                         continue
 
-                    seqid, source, feat_type, start_s, end_s, score, strand, phase, attr_s = cols
+                    (
+                        seqid,
+                        source,
+                        feat_type,
+                        start_s,
+                        end_s,
+                        score,
+                        strand,
+                        phase,
+                        attr_s,
+                    ) = cols
 
                     # Filter by feature type
                     if feat_type not in self.feature_types:
@@ -518,12 +561,15 @@ class PangenomeMiner:
                     except ValueError:
                         logger.warning(
                             "%s:%d — non-integer coordinates (%s, %s); skipping.",
-                            gff_path.name, lineno, start_s, end_s,
+                            gff_path.name,
+                            lineno,
+                            start_s,
+                            end_s,
                         )
                         continue
 
                     if end < start:
-                        start, end = end, start   # tolerate inverted coords
+                        start, end = end, start  # tolerate inverted coords
 
                     if (end - start + 1) < self.min_gene_length:
                         continue
@@ -644,7 +690,9 @@ class PangenomeMiner:
         Also calculates Heaps' Law and Rarefaction curve statistics.
         """
         if self._matrix is None:
-            raise RuntimeError("Matrix not built. Call build_presence_absence_matrix() first.")
+            raise RuntimeError(
+                "Matrix not built. Call build_presence_absence_matrix() first."
+            )
 
         n_strains = len(self._strain_ids)
         fraction_present = self._matrix.sum(axis=1) / n_strains
@@ -655,7 +703,8 @@ class PangenomeMiner:
         core_genes = self._matrix.index[fraction_present >= self.core_threshold]
         accessory_genes = self._matrix.index[fraction_present <= effective_acc]
         shell_genes = self._matrix.index[
-            (fraction_present > effective_acc) & (fraction_present < self.core_threshold)
+            (fraction_present > effective_acc)
+            & (fraction_present < self.core_threshold)
         ]
 
         # Heaps' Law
@@ -666,9 +715,10 @@ class PangenomeMiner:
             unique_genes.append(subset.sum(axis=1).gt(0).sum())
 
         from scipy.optimize import curve_fit
+
         def heaps_law(n, k, beta):
             return k * np.power(n, beta)
-        
+
         try:
             # Ensure we have enough data points for fitting
             if len(n_genomes) < 3:
@@ -677,16 +727,19 @@ class PangenomeMiner:
             # Use bounds to prevent unphysical values (k > 0, 0 < beta <= 1)
             # k: intercept/scaling factor, beta: exponent
             popt, _ = curve_fit(
-                heaps_law, 
-                n_genomes, 
-                unique_genes, 
-                p0=[max(unique_genes) / (len(n_genomes)**0.5), 0.5],
-                bounds=([1e-3, 0.001], [np.inf, 1.0])
+                heaps_law,
+                n_genomes,
+                unique_genes,
+                p0=[max(unique_genes) / (len(n_genomes) ** 0.5), 0.5],
+                bounds=([1e-3, 0.001], [np.inf, 1.0]),
             )
             k, beta = popt
             heaps_stats = {"k": float(k), "beta": float(beta), "open": bool(beta > 0.5)}
         except Exception as e:
-            logger.warning("Heaps' Law calculation failed (likely insufficient variance or data): %s", e)
+            logger.warning(
+                "Heaps' Law calculation failed (likely insufficient variance or data): %s",
+                e,
+            )
             heaps_stats = {"k": 0.0, "beta": 0.0, "open": None}
 
         rarefaction = self.calculate_rarefaction()
@@ -698,16 +751,19 @@ class PangenomeMiner:
             "  Accessory  (≤%.0f%%): %5d clusters\n"
             "  Heaps' Law           : k=%.2f, beta=%.2f (Open=%s)",
             n_strains,
-            self.core_threshold * 100, len(core_genes),
+            self.core_threshold * 100,
+            len(core_genes),
             len(shell_genes),
-            effective_acc * 100, len(accessory_genes),
-            heaps_stats["k"], heaps_stats["beta"], heaps_stats["open"]
+            effective_acc * 100,
+            len(accessory_genes),
+            heaps_stats["k"],
+            heaps_stats["beta"],
+            heaps_stats["open"],
         )
-        
-        self.stats.update({
-            "heaps_law": heaps_stats,
-            "rarefaction_curve": rarefaction.tolist()
-        })
+
+        self.stats.update(
+            {"heaps_law": heaps_stats, "rarefaction_curve": rarefaction.tolist()}
+        )
         return core_genes, accessory_genes, shell_genes
 
     # ------------------------------------------------------------------
@@ -736,7 +792,8 @@ class PangenomeMiner:
         # Collect all GeneRecord objects belonging to accessory clusters
         accessory_set = set(accessory_genes)
         accessory_records: List[GeneRecord] = [
-            rec for rec in self._all_records
+            rec
+            for rec in self._all_records
             if self._cluster_map.get(rec.gene_id) in accessory_set
         ]
 
@@ -785,8 +842,8 @@ class PangenomeMiner:
         """
         return (
             self.load_genomes(genomes_dir, annotations_dir)
-                .build_presence_absence_matrix()
-                .extract_accessory_coordinates()
+            .build_presence_absence_matrix()
+            .extract_accessory_coordinates()
         )
 
     # ------------------------------------------------------------------
@@ -798,7 +855,9 @@ class PangenomeMiner:
         Useful for downstream inspection in R (vegan, ape).
         """
         if self._matrix is None:
-            raise RuntimeError("No matrix to save. Run build_presence_absence_matrix() first.")
+            raise RuntimeError(
+                "No matrix to save. Run build_presence_absence_matrix() first."
+            )
         out = Path(output_path)
         out.parent.mkdir(parents=True, exist_ok=True)
         self._matrix.to_csv(out)

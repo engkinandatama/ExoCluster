@@ -15,8 +15,8 @@ import string
 from pathlib import Path
 
 STRAINS = ["strain_A", "strain_B", "strain_C", "strain_D", "strain_E"]
-CONTIG_LEN = 50_000      # bp per mock contig
-N_GENES = 80             # genes per strain (some shared, some unique)
+CONTIG_LEN = 50_000  # bp per mock contig
+N_GENES = 80  # genes per strain (some shared, some unique)
 SEED = 42
 
 
@@ -44,9 +44,9 @@ def generate_mock_data(output_dir: Path) -> None:
     # ---------------------------------------------------------------
     # 1. Generate a shared "core" gene pool (present in ALL strains)
     # ---------------------------------------------------------------
-    n_core = 50        # shared across all 5 strains → fraction = 1.0 (core)
-    n_unique = 10      # unique to each strain         → fraction = 0.2 (accessory)
-    n_shell = 20       # present in 2–4 strains         → shell
+    n_core = 50  # shared across all 5 strains → fraction = 1.0 (core)
+    n_unique = 10  # unique to each strain         → fraction = 0.2 (accessory)
+    n_shell = 20  # present in 2–4 strains         → shell
 
     # Each gene is a (start, end, strand, sequence, product) tuple on a 50 kbp contig
     # We lay them out sequentially with ~200 bp gaps
@@ -78,16 +78,16 @@ def generate_mock_data(output_dir: Path) -> None:
             f"##sequence-region mock_contig_1 1 {CONTIG_LEN}",
         ]
 
-        cursor = 500   # start placing genes at position 500
+        cursor = 500  # start placing genes at position 500
 
         # --- core genes (slight per-strain mutation) ---
         for gene_name, tmpl in core_templates.items():
-            seq = mutate_seq(tmpl, 0.02, rng)   # 2% mutation → still clusters together
+            seq = mutate_seq(tmpl, 0.02, rng)  # 2% mutation → still clusters together
             start = cursor
             end = start + GENE_LEN - 1
             if end >= CONTIG_LEN:
                 break
-            contig_seq[start - 1: end] = list(seq)
+            contig_seq[start - 1 : end] = list(seq)
             strand = rng.choice(["+", "-"])
             gff_lines.append(
                 f"mock_contig_1\tmock\tCDS\t{start}\t{end}\t.\t{strand}\t0\t"
@@ -105,7 +105,7 @@ def generate_mock_data(output_dir: Path) -> None:
                 end = start + GENE_LEN - 1
                 if end >= CONTIG_LEN:
                     break
-                contig_seq[start - 1: end] = list(seq)
+                contig_seq[start - 1 : end] = list(seq)
                 strand = rng.choice(["+", "-"])
                 gff_lines.append(
                     f"mock_contig_1\tmock\tCDS\t{start}\t{end}\t.\t{strand}\t0\t"
@@ -119,7 +119,7 @@ def generate_mock_data(output_dir: Path) -> None:
             end = start + GENE_LEN - 1
             if end >= CONTIG_LEN:
                 break
-            contig_seq[start - 1: end] = list(seq)
+            contig_seq[start - 1 : end] = list(seq)
             strand = rng.choice(["+", "-"])
             gff_lines.append(
                 f"mock_contig_1\tmock\tCDS\t{start}\t{end}\t.\t{strand}\t0\t"
@@ -133,7 +133,7 @@ def generate_mock_data(output_dir: Path) -> None:
             fh.write(f">mock_contig_1 {strain} mock genome\n")
             seq_str = "".join(contig_seq)
             for chunk_start in range(0, len(seq_str), 60):
-                fh.write(seq_str[chunk_start: chunk_start + 60] + "\n")
+                fh.write(seq_str[chunk_start : chunk_start + 60] + "\n")
 
         # --- Write GFF3 ---
         gff_path = annotations_dir / f"{strain}.gff"

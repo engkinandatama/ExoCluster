@@ -4,6 +4,7 @@ from pathlib import Path
 from loguru import logger
 from pipeline.bgc_predictor import BGCPredictor
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--genome", required=True)
@@ -20,7 +21,7 @@ def main():
     args = parser.parse_args()
 
     logger.info(f"Running BGC Prediction for {args.genome}")
-    
+
     try:
         predictor = BGCPredictor(
             seed=args.seed,
@@ -28,23 +29,20 @@ def main():
             use_keyword_boost=args.use_keyword_boost,
             esm_model=args.esm_model,
             device=args.device,
-            model_dir=args.model_dir
+            model_dir=args.model_dir,
         )
-        
-        predictions = predictor.run(
-            args.genome, 
-            args.annotations, 
-            args.hgt_predictions
-        )
-        
+
+        predictions = predictor.run(args.genome, args.annotations, args.hgt_predictions)
+
         predictions.to_csv(args.output, index=False)
         # Note: model_weights output logic depends on existing BGC predictor implementation
         # Placeholder for weight saving if not handled by predictor
-            
+
         logger.info("BGC Prediction completed successfully.")
     except Exception as e:
         logger.error(f"BGC Prediction failed: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

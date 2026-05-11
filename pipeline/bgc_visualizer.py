@@ -37,6 +37,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 import matplotlib
+
 matplotlib.use("Agg")  # non-interactive backend
 
 import matplotlib.pyplot as plt
@@ -49,6 +50,7 @@ from matplotlib.ticker import FixedLocator
 # Optional seaborn / scipy for heatmap
 try:
     import seaborn as sns
+
     _SEABORN_AVAILABLE = True
 except ImportError:
     sns = None
@@ -56,12 +58,14 @@ except ImportError:
 
 try:
     from scipy.cluster.hierarchy import linkage, dendrogram
+
     _SCIPY_AVAILABLE = True
 except ImportError:
     _SCIPY_AVAILABLE = False
 
 try:
     from jinja2 import Environment, BaseLoader
+
     _JINJA_AVAILABLE = True
 except ImportError:
     Environment = None
@@ -76,14 +80,14 @@ logger = logging.getLogger(__name__)
 # Colour palette for BGC classes
 # ---------------------------------------------------------------------------
 BGC_PALETTE: Dict[str, str] = {
-    "NonBGC":     "#AAAAAA",
-    "Alkaloid":   "#9B5DE5",
-    "Terpene":    "#2A9D8F",
-    "NRP":        "#E63946",
+    "NonBGC": "#AAAAAA",
+    "Alkaloid": "#9B5DE5",
+    "Terpene": "#2A9D8F",
+    "NRP": "#E63946",
     "Polyketide": "#F4A261",
-    "RiPP":       "#457B9D",
+    "RiPP": "#457B9D",
     "Saccharide": "#E9C46A",
-    "Other":      "#264653",
+    "Other": "#264653",
 }
 
 CONF_MARKERS = {"High": "^", "Medium": "o", "Low": "s"}
@@ -92,6 +96,7 @@ CONF_MARKERS = {"High": "^", "Medium": "o", "Low": "s"}
 # ===========================================================================
 # Helper utilities
 # ===========================================================================
+
 
 def _fig_to_base64(fig: Figure) -> str:
     """Encode matplotlib figure as base64 PNG string for HTML embedding."""
@@ -112,7 +117,16 @@ def _save_and_close(fig: Figure, path: str) -> str:
 def _empty_plot(output_dir: str, filename: str, title: str, message: str) -> str:
     os.makedirs(output_dir, exist_ok=True)
     fig, ax = plt.subplots(figsize=(8, 4.5))
-    ax.text(0.5, 0.5, message, ha="center", va="center", fontsize=13, transform=ax.transAxes, color="#6c757d")
+    ax.text(
+        0.5,
+        0.5,
+        message,
+        ha="center",
+        va="center",
+        fontsize=13,
+        transform=ax.transAxes,
+        color="#6c757d",
+    )
     ax.set_title(title, fontweight="bold")
     ax.set_axis_off()
     return _save_and_close(fig, os.path.join(output_dir, filename))
@@ -121,6 +135,7 @@ def _empty_plot(output_dir: str, filename: str, title: str, message: str) -> str
 # ===========================================================================
 # Plot 1 — BGC Class Distribution (stacked bar per strain)
 # ===========================================================================
+
 
 def plot_bgc_class_distribution(
     bgc_result: BGCResult,
@@ -144,17 +159,33 @@ def plot_bgc_class_distribution(
 
     # Build pivot table: strains × BGC classes (excluding Non-BGC)
     active_classes = [c for c in BGC_CLASSES if c != "NonBGC"]
-    strains = sorted({r.strain_id for r in bgc_result.bgc_hits}) if bgc_result.bgc_hits else []
+    strains = (
+        sorted({r.strain_id for r in bgc_result.bgc_hits})
+        if bgc_result.bgc_hits
+        else []
+    )
 
     if not strains:
-        logger.warning("plot_bgc_class_distribution: no BGC hits — generating empty chart")
+        logger.warning(
+            "plot_bgc_class_distribution: no BGC hits — generating empty chart"
+        )
         fig, ax = plt.subplots(figsize=(8, 4))
-        ax.text(0.5, 0.5, "No BGC hits detected", ha="center", va="center",
-                fontsize=14, transform=ax.transAxes, color="#666666")
+        ax.text(
+            0.5,
+            0.5,
+            "No BGC hits detected",
+            ha="center",
+            va="center",
+            fontsize=14,
+            transform=ax.transAxes,
+            color="#666666",
+        )
         ax.set_title("BGC Class Distribution per Strain", fontweight="bold")
         return _save_and_close(fig, os.path.join(output_dir, filename))
 
-    counts: Dict[str, Dict[str, int]] = {s: {c: 0 for c in active_classes} for s in strains}
+    counts: Dict[str, Dict[str, int]] = {
+        s: {c: 0 for c in active_classes} for s in strains
+    }
     for r in bgc_result.bgc_hits:
         if r.bgc_class in active_classes:
             counts[r.strain_id][r.bgc_class] += 1
@@ -167,16 +198,27 @@ def plot_bgc_class_distribution(
     bottom = np.zeros(len(df))
     for cls in active_classes:
         vals = df[cls].astype(float).to_numpy()
-        bars = ax.bar(df.index, vals.tolist(), bottom=bottom.tolist(),
-                      color=BGC_PALETTE[cls], label=cls, edgecolor="white", linewidth=0.5)
+        bars = ax.bar(
+            df.index,
+            vals.tolist(),
+            bottom=bottom.tolist(),
+            color=BGC_PALETTE[cls],
+            label=cls,
+            edgecolor="white",
+            linewidth=0.5,
+        )
         # Label non-zero bars
         for bar, val in zip(bars, vals):
             if val > 0:
                 ax.text(
                     bar.get_x() + bar.get_width() / 2,
                     bar.get_y() + bar.get_height() / 2,
-                    str(val), ha="center", va="center",
-                    fontsize=8, color="white", fontweight="bold",
+                    str(val),
+                    ha="center",
+                    va="center",
+                    fontsize=8,
+                    color="white",
+                    fontweight="bold",
                 )
         bottom = bottom + vals
 
@@ -197,6 +239,7 @@ def plot_bgc_class_distribution(
 # ===========================================================================
 # Plot 2 — Phylogenomic BGC Heatmap
 # ===========================================================================
+
 
 def plot_bgc_heatmap(
     bgc_result: BGCResult,
@@ -219,18 +262,29 @@ def plot_bgc_heatmap(
 
     if not strains:
         fig, ax = plt.subplots(figsize=(8, 4))
-        ax.text(0.5, 0.5, "No records to plot", ha="center", va="center",
-                fontsize=14, transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.5,
+            "No records to plot",
+            ha="center",
+            va="center",
+            fontsize=14,
+            transform=ax.transAxes,
+        )
         return _save_and_close(fig, outpath)
 
     # Count matrix
-    counts: Dict[str, Dict[str, int]] = {s: {c: 0 for c in active_classes} for s in strains}
+    counts: Dict[str, Dict[str, int]] = {
+        s: {c: 0 for c in active_classes} for s in strains
+    }
     for r in bgc_result.bgc_hits:
         if r.bgc_class in active_classes:
             counts[r.strain_id][r.bgc_class] += 1
 
     matrix = pd.DataFrame(counts).T.reindex(columns=active_classes, fill_value=0)
-    matrix.index = [s.replace("Streptomyces_abikoensis_", "S.ab. ") for s in matrix.index]
+    matrix.index = [
+        s.replace("Streptomyces_abikoensis_", "S.ab. ") for s in matrix.index
+    ]
 
     if _SEABORN_AVAILABLE and sns is not None:
         sns_mod = sns
@@ -249,7 +303,9 @@ def plot_bgc_heatmap(
             row_cluster=(len(strains) > 2),
             col_cluster=(len(active_classes) > 2),
         )
-        g.fig.suptitle("Phylogenomic BGC Heatmap", fontsize=14, fontweight="bold", y=1.02)
+        g.fig.suptitle(
+            "Phylogenomic BGC Heatmap", fontsize=14, fontweight="bold", y=1.02
+        )
         g.fig.savefig(outpath, bbox_inches="tight", dpi=150)
         plt.close(g.fig)
         logger.info("  Saved: %s", outpath)
@@ -268,7 +324,9 @@ def plot_bgc_heatmap(
         ax.set_yticklabels(matrix.index, fontsize=9)
         for i in range(len(matrix)):
             for j in range(len(active_classes)):
-                ax.text(j, i, str(matrix.values[i, j]), ha="center", va="center", fontsize=8)
+                ax.text(
+                    j, i, str(matrix.values[i, j]), ha="center", va="center", fontsize=8
+                )
         plt.colorbar(im, ax=ax, label="BGC Gene Count")
         ax.set_title("Phylogenomic BGC Heatmap", fontsize=13, fontweight="bold")
         plt.tight_layout()
@@ -282,7 +340,12 @@ def plot_phase3_decision_funnel(
     filename: str = "bgc_decision_funnel.png",
 ) -> str:
     if total_accessory_genes <= 0:
-        return _empty_plot(output_dir, filename, "Phase 3 Decision Funnel", "No accessory genes available")
+        return _empty_plot(
+            output_dir,
+            filename,
+            "Phase 3 Decision Funnel",
+            "No accessory genes available",
+        )
 
     os.makedirs(output_dir, exist_ok=True)
     outpath = os.path.join(output_dir, filename)
@@ -304,9 +367,28 @@ def plot_phase3_decision_funnel(
     ax.barh(ypos, widths, color=colors, height=0.72, edgecolor="white")
 
     for y, width, (label, count, note) in zip(ypos, widths, stages):
-        ax.text(0.02, y, label, va="center", ha="left", fontsize=11, fontweight="bold", color="#1d3557")
-        ax.text(min(width + 0.02, 0.98), y, f"{count:,}", va="center", ha="left", fontsize=11, fontweight="bold")
-        ax.text(0.02, y - 0.26, note, va="center", ha="left", fontsize=8.5, color="#6c757d")
+        ax.text(
+            0.02,
+            y,
+            label,
+            va="center",
+            ha="left",
+            fontsize=11,
+            fontweight="bold",
+            color="#1d3557",
+        )
+        ax.text(
+            min(width + 0.02, 0.98),
+            y,
+            f"{count:,}",
+            va="center",
+            ha="left",
+            fontsize=11,
+            fontweight="bold",
+        )
+        ax.text(
+            0.02, y - 0.26, note, va="center", ha="left", fontsize=8.5, color="#6c757d"
+        )
 
     ax.set_xlim(0, 1.05)
     ax.set_ylim(-0.8, len(stages) - 0.2)
@@ -328,7 +410,9 @@ def plot_bgc_neighborhood_map(
     max_regions: int = 6,
 ) -> str:
     if not bgc_result.bgc_records:
-        return _empty_plot(output_dir, filename, "BGC Neighborhood Map", "No alien genes were scored")
+        return _empty_plot(
+            output_dir, filename, "BGC Neighborhood Map", "No alien genes were scored"
+        )
 
     os.makedirs(output_dir, exist_ok=True)
     outpath = os.path.join(output_dir, filename)
@@ -345,16 +429,27 @@ def plot_bgc_neighborhood_map(
         ),
         reverse=True,
     )
-    ranked_regions = [item for item in ranked_regions if any(rec.is_bgc for rec in item[1])][:max_regions]
+    ranked_regions = [
+        item for item in ranked_regions if any(rec.is_bgc for rec in item[1])
+    ][:max_regions]
     if not ranked_regions:
-        return _empty_plot(output_dir, filename, "BGC Neighborhood Map", "No BGC hits available for neighborhood mapping")
+        return _empty_plot(
+            output_dir,
+            filename,
+            "BGC Neighborhood Map",
+            "No BGC hits available for neighborhood mapping",
+        )
 
-    fig, axes = plt.subplots(len(ranked_regions), 1, figsize=(15, max(4.5, len(ranked_regions) * 2.4)))
+    fig, axes = plt.subplots(
+        len(ranked_regions), 1, figsize=(15, max(4.5, len(ranked_regions) * 2.4))
+    )
     if len(ranked_regions) == 1:
         axes = [axes]
 
     for ax, ((strain_id, contig_id), region_records) in zip(axes, ranked_regions):
-        records = sorted(region_records, key=lambda rec: rec.hgt_record.gene_record.start)
+        records = sorted(
+            region_records, key=lambda rec: rec.hgt_record.gene_record.start
+        )
         starts = [rec.hgt_record.gene_record.start for rec in records]
         ends = [rec.hgt_record.gene_record.end for rec in records]
         centers = [0.5 * (s + e) for s, e in zip(starts, ends)]
@@ -363,9 +458,21 @@ def plot_bgc_neighborhood_map(
 
         ax.hlines(0, starts[0], ends[-1], color="#ced4da", linewidth=2.0, zorder=1)
         for rec, center, size in zip(records, centers, sizes):
-            color = BGC_PALETTE.get(rec.bgc_class, "#999999") if rec.is_bgc else "#adb5bd"
+            color = (
+                BGC_PALETTE.get(rec.bgc_class, "#999999") if rec.is_bgc else "#adb5bd"
+            )
             marker = CONF_MARKERS.get(rec.confidence_tier, "o")
-            ax.scatter(center, 0, s=size, color=color, marker=marker, edgecolors="white", linewidths=0.6, alpha=0.95, zorder=3)
+            ax.scatter(
+                center,
+                0,
+                s=size,
+                color=color,
+                marker=marker,
+                edgecolors="white",
+                linewidths=0.6,
+                alpha=0.95,
+                zorder=3,
+            )
             ax.vlines(
                 [rec.hgt_record.gene_record.start, rec.hgt_record.gene_record.end],
                 -0.08,
@@ -378,9 +485,19 @@ def plot_bgc_neighborhood_map(
         top_hits = [rec for rec in records if rec.is_bgc]
         top_hits = sorted(top_hits, key=lambda rec: rec.confidence, reverse=True)[:3]
         for rec in top_hits:
-            center = 0.5 * (rec.hgt_record.gene_record.start + rec.hgt_record.gene_record.end)
+            center = 0.5 * (
+                rec.hgt_record.gene_record.start + rec.hgt_record.gene_record.end
+            )
             label = rec.hgt_record.gene_record.product or rec.gene_id
-            ax.text(center, 0.2, label[:28], ha="center", va="bottom", fontsize=7.5, color="#343a40")
+            ax.text(
+                center,
+                0.2,
+                label[:28],
+                ha="center",
+                va="bottom",
+                fontsize=7.5,
+                color="#343a40",
+            )
 
         n_hits = sum(1 for rec in records if rec.is_bgc)
         ax.set_title(
@@ -397,8 +514,17 @@ def plot_bgc_neighborhood_map(
         mpatches.Patch(color="#adb5bd", label="Scored alien gene (NonBGC)"),
         mpatches.Patch(color="#e76f51", label="BGC hit (class-coloured)"),
     ]
-    fig.legend(handles=legend_handles, loc="lower center", bbox_to_anchor=(0.5, -0.02), ncol=2, frameon=True, fontsize=9)
-    fig.suptitle("Contig-Level BGC Hit Neighborhoods", fontsize=13, fontweight="bold", y=1.01)
+    fig.legend(
+        handles=legend_handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.02),
+        ncol=2,
+        frameon=True,
+        fontsize=9,
+    )
+    fig.suptitle(
+        "Contig-Level BGC Hit Neighborhoods", fontsize=13, fontweight="bold", y=1.01
+    )
     plt.tight_layout()
     return _save_and_close(fig, outpath)
 
@@ -406,6 +532,7 @@ def plot_bgc_neighborhood_map(
 # ===========================================================================
 # Plot 3 — BGC Confidence Landscape (scatter)
 # ===========================================================================
+
 
 def plot_bgc_confidence_landscape(
     bgc_result: BGCResult,
@@ -425,8 +552,15 @@ def plot_bgc_confidence_landscape(
 
     if not bgc_result.bgc_records:
         fig, ax = plt.subplots(figsize=(8, 5))
-        ax.text(0.5, 0.5, "No records", ha="center", va="center",
-                transform=ax.transAxes, fontsize=13)
+        ax.text(
+            0.5,
+            0.5,
+            "No records",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+            fontsize=13,
+        )
         return _save_and_close(fig, outpath)
 
     fig, ax = plt.subplots(figsize=(10, 7))
@@ -437,14 +571,20 @@ def plot_bgc_confidence_landscape(
         if not tier_recs:
             continue
 
-        xs     = [r.hgt_record.kmer_deviation for r in tier_recs]
-        ys     = [r.hgt_record.gc_deviation   for r in tier_recs]
+        xs = [r.hgt_record.kmer_deviation for r in tier_recs]
+        ys = [r.hgt_record.gc_deviation for r in tier_recs]
         colors = [BGC_PALETTE.get(r.bgc_class, "#999999") for r in tier_recs]
-        sizes  = [max(20, r.confidence * 180)              for r in tier_recs]
+        sizes = [max(20, r.confidence * 180) for r in tier_recs]
 
         ax.scatter(
-            xs, ys, c=colors, s=sizes, alpha=0.75,
-            marker=marker, edgecolors="white", linewidths=0.4,
+            xs,
+            ys,
+            c=colors,
+            s=sizes,
+            alpha=0.75,
+            marker=marker,
+            edgecolors="white",
+            linewidths=0.4,
             label=f"{tier} confidence",
         )
 
@@ -455,8 +595,11 @@ def plot_bgc_confidence_landscape(
         if any(r.bgc_class == c for r in bgc_result.bgc_records)
     ]
     leg1 = ax.legend(
-        handles=class_patches, title="BGC Class",
-        bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=9,
+        handles=class_patches,
+        title="BGC Class",
+        bbox_to_anchor=(1.01, 1),
+        loc="upper left",
+        fontsize=9,
     )
     ax.legend(title="Confidence Tier", loc="lower right", fontsize=9)
     ax.add_artist(leg1)
@@ -465,7 +608,8 @@ def plot_bgc_confidence_landscape(
     ax.set_ylabel("GC Deviation from Host", fontsize=11)
     ax.set_title(
         "BGC Confidence Landscape\n(Alien HGT genes coloured by predicted BGC class)",
-        fontsize=12, fontweight="bold",
+        fontsize=12,
+        fontweight="bold",
     )
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -680,16 +824,16 @@ def render_phase3_html_report(
     env = Environment(loader=BaseLoader())
     template = env.from_string(_PHASE3_TEMPLATE)
     html = template.render(
-        stats               = bgc_result.stats,
-        class_distribution  = bgc_result.class_distribution,
-        top_predictions     = top_preds[:max_table_rows],
-        total_bgc           = len(bgc_result.bgc_hits),
-        max_rows            = max_table_rows,
-        plot_funnel         = _embed(plot_funnel_path),
-        plot_neighborhood   = _embed(plot_neighborhood_path),
-        plot_distribution   = _embed(plot_distribution_path),
-        plot_heatmap        = _embed(plot_heatmap_path),
-        plot_landscape      = _embed(plot_landscape_path),
+        stats=bgc_result.stats,
+        class_distribution=bgc_result.class_distribution,
+        top_predictions=top_preds[:max_table_rows],
+        total_bgc=len(bgc_result.bgc_hits),
+        max_rows=max_table_rows,
+        plot_funnel=_embed(plot_funnel_path),
+        plot_neighborhood=_embed(plot_neighborhood_path),
+        plot_distribution=_embed(plot_distribution_path),
+        plot_heatmap=_embed(plot_heatmap_path),
+        plot_landscape=_embed(plot_landscape_path),
     )
 
     outpath = os.path.join(output_dir, filename)

@@ -62,48 +62,69 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--genomes", type=Path, default=Path("genomes"),
+        "--genomes",
+        type=Path,
+        default=Path("genomes"),
         help="Directory containing FASTA genome files (.fasta / .fna / .fa).",
     )
     parser.add_argument(
-        "--annotations", type=Path, default=Path("annotations"),
+        "--annotations",
+        type=Path,
+        default=Path("annotations"),
         help="Directory containing GFF3 annotation files (.gff / .gff3).",
     )
     parser.add_argument(
-        "--output", type=Path, default=Path("output"),
+        "--output",
+        type=Path,
+        default=Path("output"),
         help="Root output directory for all pipeline artefacts.",
     )
     parser.add_argument(
-        "--core-threshold", type=float, default=0.95,
+        "--core-threshold",
+        type=float,
+        default=0.95,
         help="Fraction of strains a gene must appear in to be Core (default: 0.95).",
     )
     parser.add_argument(
-        "--accessory-threshold", type=float, default=0.10,
+        "--accessory-threshold",
+        type=float,
+        default=0.10,
         help="Max fraction of strains for a gene to be Accessory (default: 0.10).",
     )
     parser.add_argument(
-        "--identity", type=float, default=0.80,
+        "--identity",
+        type=float,
+        default=0.80,
         help="Ortholog clustering sequence-identity threshold (default: 0.80).",
     )
     parser.add_argument(
-        "--cluster-method", type=str, default="mmseqs2",
+        "--cluster-method",
+        type=str,
+        default="mmseqs2",
         choices=["kmer", "mmseqs2"],
         help="Ortholog clustering method (default: mmseqs2).",
     )
     parser.add_argument(
-        "--mock", action="store_true",
+        "--mock",
+        action="store_true",
         help="Generate and use synthetic mock data for testing.",
     )
     parser.add_argument(
-        "--verbose", "-v", action="store_true",
+        "--verbose",
+        "-v",
+        action="store_true",
         help="Enable DEBUG-level logging.",
     )
     parser.add_argument(
-        "--model-dir", type=Path, default=None,
-        help="Directory with BGC-Prophet model weights (annotator.pt + classifier.pt)."
+        "--model-dir",
+        type=Path,
+        default=None,
+        help="Directory with BGC-Prophet model weights (annotator.pt + classifier.pt).",
     )
     parser.add_argument(
-        "--esm-model", type=str, default="esm2_t6_8M_UR50D",
+        "--esm-model",
+        type=str,
+        default="esm2_t6_8M_UR50D",
         help=(
             "ESM2 protein language model variant for Phase 3 embeddings. "
             "Options: esm2_t6_8M_UR50D (default, ~30 MB), esm2_t12_35M_UR50D (~140 MB), "
@@ -112,7 +133,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--device", type=str, default="auto",
+        "--device",
+        type=str,
+        default="auto",
         help=(
             "Compute device for Phase 3 ESM2 / BGC-Prophet inference. "
             "Options: auto (default, picks CUDA > MPS > CPU), cuda, mps, cpu."
@@ -184,13 +207,17 @@ def run_phase1(args: argparse.Namespace) -> tuple[PangenomeResult, PangenomeMine
 # ---------------------------------------------------------------------------
 # Phase 2 stub
 # ---------------------------------------------------------------------------
-def run_phase2(phase1_result: PangenomeResult, miner: PangenomeMiner, args: argparse.Namespace) -> HGTResult:
+def run_phase2(
+    phase1_result: PangenomeResult, miner: PangenomeMiner, args: argparse.Namespace
+) -> HGTResult:
     logger.info("=" * 60)
     logger.info("PHASE 2 — The HGT Detective")
     logger.info("=" * 60)
 
     detective = HGTDetective(contamination=0.30, n_estimators=200)
-    hgt_result = detective.run(phase1_result=phase1_result, fasta_store=miner._fasta_store)
+    hgt_result = detective.run(
+        phase1_result=phase1_result, fasta_store=miner._fasta_store
+    )
 
     # Phase 2 Visualizations
     logger.info("Generating HGT visualizations …")
@@ -199,7 +226,7 @@ def run_phase2(phase1_result: PangenomeResult, miner: PangenomeMiner, args: argp
 
     genomic_plot_paths = {}
     for strain_id in phase1_result.strain_ids:
-        safe_name = strain_id.replace('/', '_').replace(' ', '_')
+        safe_name = strain_id.replace("/", "_").replace(" ", "_")
         plot_path = plot_genomic_island_architecture(
             hgt_result=hgt_result,
             strain_id=strain_id,
@@ -246,7 +273,14 @@ def run_phase3(
     logger.info("PHASE 3 — The AI Discoverer (BGC Prediction)")
     logger.info("=" * 60)
 
-    predictor = BGCPredictor(seed=42, min_confidence=0.25, use_keyword_boost=True, model_dir=args.model_dir, esm_model_name=args.esm_model, device=args.device)
+    predictor = BGCPredictor(
+        seed=42,
+        min_confidence=0.25,
+        use_keyword_boost=True,
+        model_dir=args.model_dir,
+        esm_model_name=args.esm_model,
+        device=args.device,
+    )
     bgc_result = predictor.run(hgt_result, all_gene_records=all_gene_records)
 
     # Phase 3 Visualizations
@@ -306,6 +340,7 @@ def run_phase3(
         f"  Outputs → {p3_dir}/\n"
     )
     return bgc_result
+
 
 # ---------------------------------------------------------------------------
 # Mock data helper

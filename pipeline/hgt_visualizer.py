@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -43,6 +44,7 @@ def _norm01(values: List[float]) -> List[float]:
 # 1. Genomic Island Architecture Plot
 # ---------------------------------------------------------------------------
 
+
 def plot_genomic_island_architecture(
     hgt_result: HGTResult,
     strain_id: str,
@@ -69,8 +71,9 @@ def plot_genomic_island_architecture(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Filter records for this strain
-    strain_records = [r for r in hgt_result.hgt_records
-                      if r.gene_record.strain_id == strain_id]
+    strain_records = [
+        r for r in hgt_result.hgt_records if r.gene_record.strain_id == strain_id
+    ]
     if not strain_records:
         logger.warning("No HGT records found for strain %s", strain_id)
         return None
@@ -93,13 +96,15 @@ def plot_genomic_island_architecture(
 
     fig.suptitle(
         f"Genomic Island Architecture — {strain_id}",
-        fontsize=13, fontweight="bold", y=1.01
+        fontsize=13,
+        fontweight="bold",
+        y=1.01,
     )
 
     for ax, contig in zip(axes, top_contigs):
         records = contig_map[contig][:max_genes]
         contig_start = records[0].gene_record.start
-        contig_end   = records[-1].gene_record.end
+        contig_end = records[-1].gene_record.end
         span = contig_end - contig_start + 1
         anomaly_norm = _norm01([r.anomaly_score for r in records])
         gc_norm = _norm01([r.gc_deviation for r in records])
@@ -147,15 +152,15 @@ def plot_genomic_island_architecture(
 
             # Choose colour
             if rec.is_hgt:
-                color = "#922b21"    # dark red — Alien HGT
+                color = "#922b21"  # dark red — Alien HGT
                 zorder = 4
             elif rec.mge_proximity and any(
                 kw in gene.product.lower() for kw in MGE_KEYWORDS
             ):
-                color = "#d35400"    # orange — MGE
+                color = "#d35400"  # orange — MGE
                 zorder = 3
             else:
-                color = "#aab7b8"    # gray — core/shell
+                color = "#aab7b8"  # gray — core/shell
                 zorder = 2
 
             # Draw arrow
@@ -176,19 +181,54 @@ def plot_genomic_island_architecture(
             anom_y = -0.10 - 0.28 * anom01
             gc_y = -0.43 - 0.22 * gc01
             kmer_y = -0.78 - 0.20 * kmer01
-            ax.vlines(center, -0.08, anom_y, color=evidence_color, linewidth=1.0, alpha=0.9, zorder=2)
-            ax.scatter(center, anom_y, s=16, color="#8e44ad", edgecolors="white", linewidths=0.3, zorder=5)
-            ax.scatter(center, gc_y, s=15, color="#1f77b4", edgecolors="white", linewidths=0.3, zorder=5)
-            ax.scatter(center, kmer_y, s=15, color="#16a085", edgecolors="white", linewidths=0.3, zorder=5)
+            ax.vlines(
+                center,
+                -0.08,
+                anom_y,
+                color=evidence_color,
+                linewidth=1.0,
+                alpha=0.9,
+                zorder=2,
+            )
+            ax.scatter(
+                center,
+                anom_y,
+                s=16,
+                color="#8e44ad",
+                edgecolors="white",
+                linewidths=0.3,
+                zorder=5,
+            )
+            ax.scatter(
+                center,
+                gc_y,
+                s=15,
+                color="#1f77b4",
+                edgecolors="white",
+                linewidths=0.3,
+                zorder=5,
+            )
+            ax.scatter(
+                center,
+                kmer_y,
+                s=15,
+                color="#16a085",
+                edgecolors="white",
+                linewidths=0.3,
+                zorder=5,
+            )
 
             # Label HGT genes (skip tiny ones)
             if rec.is_hgt and length > span * 0.015:
                 label = gene.product[:22] if gene.product else gene.gene_id[:18]
                 ax.text(
-                    (s + e) / 2, y_center + 0.58,
+                    (s + e) / 2,
+                    y_center + 0.58,
                     label,
-                    ha="center", va="bottom",
-                    fontsize=6.5, color="#922b21",
+                    ha="center",
+                    va="bottom",
+                    fontsize=6.5,
+                    color="#922b21",
                     fontweight="bold",
                     clip_on=True,
                 )
@@ -196,14 +236,17 @@ def plot_genomic_island_architecture(
         # Axes labels
         n_hgt = sum(1 for r in records if r.is_hgt)
         n_mge = sum(
-            1 for r in records
-            if r.mge_proximity and any(kw in (r.gene_record.product or "").lower() for kw in MGE_KEYWORDS)
+            1
+            for r in records
+            if r.mge_proximity
+            and any(kw in (r.gene_record.product or "").lower() for kw in MGE_KEYWORDS)
         )
         ax.set_title(
             f"Contig: {contig}  |  {len(records)} genes shown  |  "
             f"{n_hgt} Alien HGT  |  {n_mge} MGE-like genes  |  "
             f"pos {contig_start:,}\u2013{contig_end:,} bp",
-            fontsize=9, loc="left",
+            fontsize=9,
+            loc="left",
         )
         ax.set_xlabel("Genomic position (bp)", fontsize=8)
         ax.set_yticks([])
@@ -213,6 +256,7 @@ def plot_genomic_island_architecture(
         # x-axis: nice Mbp/kbp formatting
         xticks = ax.get_xticks()
         from matplotlib.ticker import FixedLocator
+
         ax.xaxis.set_major_locator(FixedLocator(xticks))
         ax.set_xticklabels([f"{x/1000:.0f} kb" for x in xticks])
 
@@ -225,8 +269,14 @@ def plot_genomic_island_architecture(
         mpatches.Patch(color="#1f77b4", label="GC deviation"),
         mpatches.Patch(color="#16a085", label="k-mer deviation"),
     ]
-    fig.legend(handles=legend_patches, loc="lower center",
-               bbox_to_anchor=(0.5, -0.04), ncol=6, fontsize=9, frameon=True)
+    fig.legend(
+        handles=legend_patches,
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.04),
+        ncol=6,
+        fontsize=9,
+        frameon=True,
+    )
 
     plt.tight_layout()
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
@@ -238,6 +288,7 @@ def plot_genomic_island_architecture(
 # ---------------------------------------------------------------------------
 # 2. HGT Feature Distribution
 # ---------------------------------------------------------------------------
+
 
 def plot_hgt_feature_distributions(
     hgt_result: HGTResult,
@@ -264,14 +315,17 @@ def plot_hgt_feature_distributions(
         return [getattr(r, attr) for r in recs]
 
     fig, axes = plt.subplots(2, 2, figsize=(13, 8))
-    fig.suptitle("Phase 2 — HGT Feature Distributions\n(Alien HGT Regions vs Normal Accessory Genes)",
-                 fontsize=12, fontweight="bold")
+    fig.suptitle(
+        "Phase 2 — HGT Feature Distributions\n(Alien HGT Regions vs Normal Accessory Genes)",
+        fontsize=12,
+        fontweight="bold",
+    )
 
     panels = [
-        ("gc_content",    "GC Content",             "GC Fraction"),
-        ("gc_deviation",  "GC Deviation from Host",  "| Gene GC − Host GC | / Host GC"),
-        ("kmer_deviation","K-mer Cosine Deviation",  "1 − Cosine Similarity to Host"),
-        ("anomaly_score", "Anomaly Score",           "IsolationForest Score (higher=more alien)"),
+        ("gc_content", "GC Content", "GC Fraction"),
+        ("gc_deviation", "GC Deviation from Host", "| Gene GC − Host GC | / Host GC"),
+        ("kmer_deviation", "K-mer Cosine Deviation", "1 − Cosine Similarity to Host"),
+        ("anomaly_score", "Anomaly Score", "IsolationForest Score (higher=more alien)"),
     ]
 
     for ax, (attr, title, xlabel) in zip(axes.flat, panels):
@@ -279,10 +333,22 @@ def plot_hgt_feature_distributions(
         hgt_vals = _get(hgt_recs, attr)
 
         bins = 35
-        ax.hist(nrm_vals, bins=bins, alpha=0.6, color="#27ae60",
-                label=f"Normal ({len(nrm_recs):,})", density=True)
-        ax.hist(hgt_vals, bins=bins, alpha=0.7, color="#922b21",
-                label=f"HGT ({len(hgt_recs):,})", density=True)
+        ax.hist(
+            nrm_vals,
+            bins=bins,
+            alpha=0.6,
+            color="#27ae60",
+            label=f"Normal ({len(nrm_recs):,})",
+            density=True,
+        )
+        ax.hist(
+            hgt_vals,
+            bins=bins,
+            alpha=0.7,
+            color="#922b21",
+            label=f"HGT ({len(hgt_recs):,})",
+            density=True,
+        )
         ax.set_title(title, fontsize=10, fontweight="bold")
         ax.set_xlabel(xlabel, fontsize=8)
         ax.set_ylabel("Density", fontsize=8)
@@ -489,7 +555,9 @@ def render_phase2_html_report(
             return str(p)
 
     # Sort HGT records by anomaly score descending
-    top_hgt = sorted(hgt_result.alien_records, key=lambda r: r.anomaly_score, reverse=True)[:80]
+    top_hgt = sorted(
+        hgt_result.alien_records, key=lambda r: r.anomaly_score, reverse=True
+    )[:80]
 
     env = Environment(loader=BaseLoader())
     env.filters["truncate"] = lambda s, n: s[:n] + "…" if len(s) > n else s

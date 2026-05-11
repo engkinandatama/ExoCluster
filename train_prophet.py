@@ -62,14 +62,20 @@ logger = logging.getLogger("train_prophet")
 # BGC-Prophet weights at models/model/ root (nhead=3). This script only trains
 # weights for larger models (35M, 150M, 650M) at their native embedding dimensions.
 ESM2_REGISTRY: Dict[str, Dict] = {
-    "esm2_t12_35M_UR50D":  {"layers": 12, "embed_dim": 480,  "params": "35M"},
-    "esm2_t30_150M_UR50D": {"layers": 30, "embed_dim": 640,  "params": "150M"},
+    "esm2_t12_35M_UR50D": {"layers": 12, "embed_dim": 480, "params": "35M"},
+    "esm2_t30_150M_UR50D": {"layers": 30, "embed_dim": 640, "params": "150M"},
     "esm2_t33_650M_UR50D": {"layers": 33, "embed_dim": 1280, "params": "650M"},
 }
 
 # BGC class labels — same order as bgc_predictor.py _PROPHET_TYPE_LABELS
 BGC_CLASS_LABELS: List[str] = [
-    "Alkaloid", "Terpene", "NRP", "Polyketide", "RiPP", "Saccharide", "Other",
+    "Alkaloid",
+    "Terpene",
+    "NRP",
+    "Polyketide",
+    "RiPP",
+    "Saccharide",
+    "Other",
 ]
 BGC_CLASS_MAP: Dict[str, int] = {name: i for i, name in enumerate(BGC_CLASS_LABELS)}
 NUM_CLASSES: int = len(BGC_CLASS_LABELS)
@@ -93,44 +99,67 @@ ESM2_MAX_SEQ_LEN: int = 1022
 MIBIG_URL: str = "https://dl.secondarymetabolites.org/mibig/mibig_json_3.1.tar.gz"
 MIBIG_TARBALL: str = "mibig_json_3.1.tar.gz"
 
-MIBIG_FASTA_URL: str = "https://dl.secondarymetabolites.org/mibig/mibig_prot_seqs_3.1.fasta"
+MIBIG_FASTA_URL: str = (
+    "https://dl.secondarymetabolites.org/mibig/mibig_prot_seqs_3.1.fasta"
+)
 MIBIG_FASTA_FILE: str = "mibig_prot_seqs_3.1.fasta"
 # Amino acid frequencies (natural, for generating realistic negative sequences)
 _AA_ALPHABET: str = "ACDEFGHIKLMNPQRSTVWY"
 _AA_FREQUENCIES: List[float] = [
-    0.0825, 0.0137, 0.0545, 0.0675, 0.0386, 0.0707, 0.0227, 0.0596,
-    0.0584, 0.0966, 0.0242, 0.0406, 0.0470, 0.0393, 0.0553, 0.0656,
-    0.0534, 0.0687, 0.0108, 0.0292,
+    0.0825,
+    0.0137,
+    0.0545,
+    0.0675,
+    0.0386,
+    0.0707,
+    0.0227,
+    0.0596,
+    0.0584,
+    0.0966,
+    0.0242,
+    0.0406,
+    0.0470,
+    0.0393,
+    0.0553,
+    0.0656,
+    0.0534,
+    0.0687,
+    0.0108,
+    0.0292,
 ]
 
 # ---------------------------------------------------------------------------
 # Dataclasses
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class BGCEntry:
     """A parsed MIBiG BGC cluster with its gene protein sequences."""
+
     bgc_id: str
-    biosyn_classes: List[str]          # Normalized class names
-    class_vector: np.ndarray           # (7,) multi-hot float32
-    protein_sequences: List[str]       # Protein amino acid sequences
-    protein_ids: List[str]             # Unique identifiers per protein
+    biosyn_classes: List[str]  # Normalized class names
+    class_vector: np.ndarray  # (7,) multi-hot float32
+    protein_sequences: List[str]  # Protein amino acid sequences
+    protein_ids: List[str]  # Unique identifiers per protein
 
 
 @dataclass
 class TrainingWindow:
     """A 128-gene training window with labels."""
+
     window_id: str
-    protein_sequences: List[str]       # Up to 128 protein sequences
-    binary_labels: np.ndarray          # (128,) float32 — 1=BGC gene, 0=pad/NonBGC
-    class_labels: np.ndarray           # (7,) float32 — multi-hot BGC class
-    padding_mask: np.ndarray           # (128,) bool — True where padded
-    is_positive: bool                  # True if BGC-positive window
+    protein_sequences: List[str]  # Up to 128 protein sequences
+    binary_labels: np.ndarray  # (128,) float32 — 1=BGC gene, 0=pad/NonBGC
+    class_labels: np.ndarray  # (7,) float32 — multi-hot BGC class
+    padding_mask: np.ndarray  # (128,) bool — True where padded
+    is_positive: bool  # True if BGC-positive window
 
 
 # ---------------------------------------------------------------------------
 # Data Pipeline
 # ---------------------------------------------------------------------------
+
 
 def download_mibig(data_dir: Path, max_retries: int = 3) -> Path:
     """Download and extract MIBiG JSON archive.
@@ -155,12 +184,14 @@ def download_mibig(data_dir: Path, max_retries: int = 3) -> Path:
                 logger.info("Download complete (%s).", tarball_path)
                 break
             except Exception as exc:
-                logger.warning("Download attempt %d/%d failed: %s", attempt, max_retries, exc)
+                logger.warning(
+                    "Download attempt %d/%d failed: %s", attempt, max_retries, exc
+                )
                 if attempt == max_retries:
                     raise RuntimeError(
                         f"Failed to download MIBiG after {max_retries} attempts"
                     ) from exc
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
 
     # Extract
     logger.info("Extracting %s ...", tarball_path.name)
@@ -215,12 +246,14 @@ def download_mibig_fasta(data_dir: Path, max_retries: int = 3) -> Path:
             logger.info("Download complete (%s).", fasta_path)
             return fasta_path
         except Exception as exc:
-            logger.warning("Download attempt %d/%d failed: %s", attempt, max_retries, exc)
+            logger.warning(
+                "Download attempt %d/%d failed: %s", attempt, max_retries, exc
+            )
             if attempt == max_retries:
                 raise RuntimeError(
                     f"Failed to download MIBiG FASTA after {max_retries} attempts"
                 ) from exc
-            time.sleep(2 ** attempt)
+            time.sleep(2**attempt)
 
     # Unreachable but satisfies type checker
     return fasta_path
@@ -270,7 +303,8 @@ def parse_mibig_fasta(fasta_path: Path) -> Dict[str, List[str]]:
     total_proteins = sum(len(v) for v in protein_map.values())
     logger.info(
         "Loaded %d proteins across %d BGC clusters from FASTA.",
-        total_proteins, len(protein_map),
+        total_proteins,
+        len(protein_map),
     )
     return protein_map
 
@@ -368,22 +402,24 @@ def parse_mibig_entries(
         # Pad or trim gene_ids to match clean_proteins length
         if len(gene_ids) < len(clean_proteins):
             gene_ids += [
-                f"{bgc_id}_prot_{i}"
-                for i in range(len(gene_ids), len(clean_proteins))
+                f"{bgc_id}_prot_{i}" for i in range(len(gene_ids), len(clean_proteins))
             ]
         protein_ids = gene_ids[: len(clean_proteins)]
 
-        entries.append(BGCEntry(
-            bgc_id=bgc_id,
-            biosyn_classes=norm_classes,
-            class_vector=class_vec,
-            protein_sequences=clean_proteins,
-            protein_ids=protein_ids,
-        ))
+        entries.append(
+            BGCEntry(
+                bgc_id=bgc_id,
+                biosyn_classes=norm_classes,
+                class_vector=class_vec,
+                protein_sequences=clean_proteins,
+                protein_ids=protein_ids,
+            )
+        )
 
     logger.info(
         "Parsed %d BGC entries (%d skipped) with %d total proteins.",
-        len(entries), skipped,
+        len(entries),
+        skipped,
         sum(len(e.protein_sequences) for e in entries),
     )
     return entries
@@ -444,21 +480,23 @@ def create_training_windows(
                 # Pad sequences list to WINDOW_SIZE
                 win_seqs_padded = win_seqs + [""] * (WINDOW_SIZE - n_actual)
 
-                windows.append(TrainingWindow(
-                    window_id=f"{entry.bgc_id}_w{start}",
-                    protein_sequences=win_seqs_padded,
-                    binary_labels=binary,
-                    class_labels=entry.class_vector.copy(),
-                    padding_mask=pad_mask,
-                    is_positive=True,
-                ))
+                windows.append(
+                    TrainingWindow(
+                        window_id=f"{entry.bgc_id}_w{start}",
+                        protein_sequences=win_seqs_padded,
+                        binary_labels=binary,
+                        class_labels=entry.class_vector.copy(),
+                        padding_mask=pad_mask,
+                        is_positive=True,
+                    )
+                )
         else:
             # Center genes in the window
             pad_before = (WINDOW_SIZE - n_genes) // 2
             binary = np.zeros(WINDOW_SIZE, dtype=np.float32)
-            binary[pad_before:pad_before + n_genes] = 1.0
+            binary[pad_before : pad_before + n_genes] = 1.0
             pad_mask = np.ones(WINDOW_SIZE, dtype=bool)
-            pad_mask[pad_before:pad_before + n_genes] = False
+            pad_mask[pad_before : pad_before + n_genes] = False
 
             win_seqs = (
                 [""] * pad_before
@@ -466,14 +504,16 @@ def create_training_windows(
                 + [""] * (WINDOW_SIZE - pad_before - n_genes)
             )
 
-            windows.append(TrainingWindow(
-                window_id=f"{entry.bgc_id}_w0",
-                protein_sequences=win_seqs,
-                binary_labels=binary,
-                class_labels=entry.class_vector.copy(),
-                padding_mask=pad_mask,
-                is_positive=True,
-            ))
+            windows.append(
+                TrainingWindow(
+                    window_id=f"{entry.bgc_id}_w0",
+                    protein_sequences=win_seqs,
+                    binary_labels=binary,
+                    class_labels=entry.class_vector.copy(),
+                    padding_mask=pad_mask,
+                    is_positive=True,
+                )
+            )
 
     n_positive = len(windows)
     logger.info("Created %d positive training windows.", n_positive)
@@ -484,19 +524,22 @@ def create_training_windows(
 
     for wi in range(num_negative_windows):
         start = wi * WINDOW_SIZE
-        win_seqs = neg_proteins[start:start + WINDOW_SIZE]
-        windows.append(TrainingWindow(
-            window_id=f"neg_{wi}",
-            protein_sequences=win_seqs,
-            binary_labels=np.zeros(WINDOW_SIZE, dtype=np.float32),
-            class_labels=np.zeros(NUM_CLASSES, dtype=np.float32),
-            padding_mask=np.zeros(WINDOW_SIZE, dtype=bool),  # all real (no padding)
-            is_positive=False,
-        ))
+        win_seqs = neg_proteins[start : start + WINDOW_SIZE]
+        windows.append(
+            TrainingWindow(
+                window_id=f"neg_{wi}",
+                protein_sequences=win_seqs,
+                binary_labels=np.zeros(WINDOW_SIZE, dtype=np.float32),
+                class_labels=np.zeros(NUM_CLASSES, dtype=np.float32),
+                padding_mask=np.zeros(WINDOW_SIZE, dtype=bool),  # all real (no padding)
+                is_positive=False,
+            )
+        )
 
     logger.info(
         "Created %d negative windows. Total: %d windows.",
-        num_negative_windows, len(windows),
+        num_negative_windows,
+        len(windows),
     )
 
     # Shuffle
@@ -507,6 +550,7 @@ def create_training_windows(
 # ---------------------------------------------------------------------------
 # ESM2 Embedding Extraction
 # ---------------------------------------------------------------------------
+
 
 def _detect_device(preference: str = "auto") -> torch.device:
     """Detect best available device: cuda > mps > cpu."""
@@ -576,7 +620,7 @@ def precompute_embeddings(
     total_batches = (len(seq_list) + batch_size - 1) // batch_size
 
     for bi in range(0, len(seq_list), batch_size):
-        batch_seqs = seq_list[bi:bi + batch_size]
+        batch_seqs = seq_list[bi : bi + batch_size]
         batch_num = bi // batch_size + 1
 
         # Truncate sequences > 1022 residues
@@ -597,7 +641,7 @@ def precompute_embeddings(
             for j, seq in enumerate(batch_seqs):
                 seq_len = min(len(seq), ESM2_MAX_SEQ_LEN)
                 # Token positions: 0=BOS, 1..seq_len=residues, seq_len+1=EOS
-                emb = representations[j, 1:seq_len + 1, :].mean(dim=0)  # (D,)
+                emb = representations[j, 1 : seq_len + 1, :].mean(dim=0)  # (D,)
                 embeddings[seq] = emb.cpu().numpy()
 
         except RuntimeError as exc:
@@ -605,7 +649,9 @@ def precompute_embeddings(
                 logger.error(
                     "GPU OOM at batch %d/%d. Try reducing --batch-size. "
                     "Current batch has %d sequences, longest=%d residues.",
-                    batch_num, total_batches, len(batch_seqs),
+                    batch_num,
+                    total_batches,
+                    len(batch_seqs),
                     max(len(s) for s in batch_seqs),
                 )
                 # Clear GPU cache and retry with smaller sub-batches
@@ -619,7 +665,7 @@ def precompute_embeddings(
                             res = esm_model(single_tokens, repr_layers=[repr_layer])
                         rep = res["representations"][repr_layer]
                         seq_len = min(len(seq), ESM2_MAX_SEQ_LEN)
-                        emb = rep[0, 1:seq_len + 1, :].mean(dim=0)
+                        emb = rep[0, 1 : seq_len + 1, :].mean(dim=0)
                         embeddings[seq] = emb.cpu().numpy()
                     except RuntimeError:
                         logger.warning(
@@ -633,7 +679,9 @@ def precompute_embeddings(
         if batch_num % 50 == 0 or batch_num == total_batches:
             logger.info(
                 "  Embedding progress: %d/%d batches (%.1f%%)",
-                batch_num, total_batches, 100.0 * batch_num / total_batches,
+                batch_num,
+                total_batches,
+                100.0 * batch_num / total_batches,
             )
 
     logger.info("Computed %d protein embeddings.", len(embeddings))
@@ -689,6 +737,7 @@ def build_window_tensors(
 # PyTorch Dataset
 # ---------------------------------------------------------------------------
 
+
 class BGCDataset(Dataset):
     """Dataset for BGC-Prophet training.
 
@@ -730,6 +779,7 @@ class BGCDataset(Dataset):
 # ---------------------------------------------------------------------------
 # Training Functions
 # ---------------------------------------------------------------------------
+
 
 def train_annotator(
     model: nn.Module,
@@ -820,13 +870,18 @@ def train_annotator(
         if epoch % 5 == 0 or epoch == 1 or epoch == epochs:
             logger.info(
                 "  Epoch %3d/%d  train_loss=%.4f  val_loss=%.4f  lr=%.2e%s",
-                epoch, epochs, avg_train, avg_val,
-                scheduler.get_last_lr()[0], marker,
+                epoch,
+                epochs,
+                avg_train,
+                avg_val,
+                scheduler.get_last_lr()[0],
+                marker,
             )
 
     logger.info(
         "Annotator training complete. Best val_loss=%.4f (saved to %s)",
-        best_val_loss, save_path,
+        best_val_loss,
+        save_path,
     )
     return {"best_val_loss": best_val_loss, "history": history}
 
@@ -898,7 +953,9 @@ def train_classifier(
 
         with torch.no_grad():
             for batch in val_loader:
-                emb, _binary, cls_labels, pad_mask, is_pos = [b.to(device) for b in batch]
+                emb, _binary, cls_labels, pad_mask, is_pos = [
+                    b.to(device) for b in batch
+                ]
                 pos_idx = is_pos.bool()
                 if not pos_idx.any():
                     continue
@@ -926,13 +983,18 @@ def train_classifier(
         if epoch % 5 == 0 or epoch == 1 or epoch == epochs:
             logger.info(
                 "  Epoch %3d/%d  train_loss=%.4f  val_loss=%.4f  lr=%.2e%s",
-                epoch, epochs, avg_train, avg_val,
-                scheduler.get_last_lr()[0], marker,
+                epoch,
+                epochs,
+                avg_train,
+                avg_val,
+                scheduler.get_last_lr()[0],
+                marker,
             )
 
     logger.info(
         "Classifier training complete. Best val_loss=%.4f (saved to %s)",
-        best_val_loss, save_path,
+        best_val_loss,
+        save_path,
     )
     return {"best_val_loss": best_val_loss, "history": history}
 
@@ -940,6 +1002,7 @@ def train_classifier(
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main(args: argparse.Namespace) -> None:
     """Main training pipeline."""
@@ -978,8 +1041,12 @@ def main(args: argparse.Namespace) -> None:
     logger.info("=" * 60)
     logger.info("BGC-Prophet Training Pipeline")
     logger.info("=" * 60)
-    logger.info("  ESM2 model:    %s (%s params, embed_dim=%d)",
-                args.esm_model, esm_info["params"], embed_dim)
+    logger.info(
+        "  ESM2 model:    %s (%s params, embed_dim=%d)",
+        args.esm_model,
+        esm_info["params"],
+        embed_dim,
+    )
     logger.info("  Data dir:      %s", data_dir)
     logger.info("  Output dir:    %s", output_dir)
     logger.info("  Epochs:        %d", args.epochs)
@@ -1054,8 +1121,9 @@ def main(args: argparse.Namespace) -> None:
     logger.info("Step 4: Building datasets")
     logger.info("-" * 60)
 
-    emb_windows, binary_labels, class_labels, padding_masks, is_positive = \
+    emb_windows, binary_labels, class_labels, padding_masks, is_positive = (
         build_window_tensors(windows, embeddings, embed_dim)
+    )
 
     # Free raw embeddings dict
     del embeddings
@@ -1070,7 +1138,8 @@ def main(args: argparse.Namespace) -> None:
     n_train = n_total - n_val
 
     train_dataset, val_dataset = random_split(
-        full_dataset, [n_train, n_val],
+        full_dataset,
+        [n_train, n_val],
         generator=torch.Generator().manual_seed(args.seed),
     )
 
@@ -1101,7 +1170,10 @@ def main(args: argparse.Namespace) -> None:
 
     logger.info(
         "Model config: d_model=%d, nhead=%d, layers=%d, ff=%d",
-        d_model, nhead, num_encoder_layers, dim_feedforward,
+        d_model,
+        nhead,
+        num_encoder_layers,
+        dim_feedforward,
     )
 
     # ---- Step 6: Train annotator ----
@@ -1223,6 +1295,7 @@ def main(args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""

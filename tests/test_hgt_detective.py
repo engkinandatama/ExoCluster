@@ -39,7 +39,6 @@ from pipeline.hgt_detective import (
 )
 from pipeline.pangenome_miner import GeneRecord, PangenomeMiner, PangenomeResult
 
-
 # ---------------------------------------------------------------------------
 # Shared test helpers
 # ---------------------------------------------------------------------------
@@ -92,6 +91,7 @@ def _write_gff(
 # Fixtures / builders
 # ---------------------------------------------------------------------------
 
+
 class _SyntheticData:
     """Three-strain synthetic dataset for HGT detection tests.
 
@@ -139,14 +139,16 @@ class _SyntheticData:
 
         for strain_id, genes in self._GENE_DEFS.items():
             # Build a random host sequence with ~50% GC
-            host_seq = list(_random_dna(self.CONTIG_LEN, gc_frac=0.50, seed=ord(strain_id)))
+            host_seq = list(
+                _random_dna(self.CONTIG_LEN, gc_frac=0.50, seed=ord(strain_id))
+            )
 
             # Embed each gene's sequence; gE gets low GC to look alien
             for start, end, strand, name, _product in genes:
                 gene_len = end - start
                 gc = 0.25 if name == "gE" else 0.50
                 gene_seq = _random_dna(gene_len, gc_frac=gc, seed=hash(name) % 10000)
-                host_seq[start : end] = list(gene_seq)
+                host_seq[start:end] = list(gene_seq)
 
             contig_seq = "".join(host_seq)
             self._sequences[strain_id] = contig_seq
@@ -184,7 +186,7 @@ class _SyntheticData:
         # Shell gene: present in A and B only (gD)
         # Accessory A: gE (alien, low-GC), gF (MGE tnpA)
         # Accessory B: gG (normal)
-        core_names  = ["gA", "gB", "gC"]
+        core_names = ["gA", "gB", "gC"]
         shell_names = ["gD"]
         acc_a_names = ["gE", "gF"]
         acc_b_names = ["gG"]
@@ -194,7 +196,7 @@ class _SyntheticData:
         for sid, names in [("A", acc_a_names), ("B", acc_b_names)]:
             strain_defs = self._GENE_DEFS[sid]
             contig_id = f"contig_{sid}"
-            host_seq  = _random_dna(self.CONTIG_LEN, gc_frac=0.50, seed=ord(sid))
+            host_seq = _random_dna(self.CONTIG_LEN, gc_frac=0.50, seed=ord(sid))
             for start, end, strand, name, product in strain_defs:
                 if name not in names:
                     continue
@@ -202,18 +204,22 @@ class _SyntheticData:
                     gc = 0.25  # low-GC alien
                 else:
                     gc = 0.50
-                gene_seq = _random_dna(end - start + 1, gc_frac=gc, seed=hash(name) % 10000)
-                accessory_records.append(GeneRecord(
-                    gene_id=f"{name}_{sid}",
-                    strain_id=sid,
-                    contig=contig_id,
-                    start=start,
-                    end=end,
-                    strand=strand,
-                    feature_type="CDS",
-                    product=product,
-                    sequence=gene_seq,
-                ))
+                gene_seq = _random_dna(
+                    end - start + 1, gc_frac=gc, seed=hash(name) % 10000
+                )
+                accessory_records.append(
+                    GeneRecord(
+                        gene_id=f"{name}_{sid}",
+                        strain_id=sid,
+                        contig=contig_id,
+                        start=start,
+                        end=end,
+                        strand=strand,
+                        feature_type="CDS",
+                        product=product,
+                        sequence=gene_seq,
+                    )
+                )
 
         # Build a minimal presence/absence matrix
         all_gene_ids = (
@@ -248,7 +254,8 @@ class _SyntheticData:
             stats={
                 "n_strains": 3,
                 "n_total_clusters": len(all_gene_ids),
-                "n_core": 3, "n_shell": 1,
+                "n_core": 3,
+                "n_shell": 1,
                 "n_accessory": len(accessory_records),
             },
         )
@@ -263,6 +270,7 @@ class _SyntheticData:
         # Populate _fasta_store directly from known contig sequences
         from Bio.SeqRecord import SeqRecord
         from Bio.Seq import Seq
+
         miner._fasta_store = {}
         for sid in ["A", "B", "C"]:
             host_seq = _random_dna(self.CONTIG_LEN, gc_frac=0.50, seed=ord(sid))
@@ -277,6 +285,7 @@ class _SyntheticData:
 # ---------------------------------------------------------------------------
 # 1. Helper function unit tests
 # ---------------------------------------------------------------------------
+
 
 class TestGcContent(unittest.TestCase):
     """Tests for the _gc_content helper."""
@@ -329,6 +338,7 @@ class TestTetranucleotideFreq(unittest.TestCase):
 # 2. HGTDetective initialisation tests
 # ---------------------------------------------------------------------------
 
+
 class TestHGTDetectiveInit(unittest.TestCase):
 
     def test_default_params(self) -> None:
@@ -359,6 +369,7 @@ class TestHGTDetectiveInit(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 3. Integration tests
 # ---------------------------------------------------------------------------
+
 
 class TestHGTDetectiveRun(unittest.TestCase):
     """Integration tests that run Phase 2 on the synthetic 3-strain dataset."""
@@ -460,7 +471,9 @@ class TestHGTDetectiveRun(unittest.TestCase):
         }
         actual_cols = set(self.hgt_result.feature_matrix.columns)
         missing = required_cols - actual_cols
-        self.assertEqual(missing, set(), msg=f"Feature matrix missing columns: {missing}")
+        self.assertEqual(
+            missing, set(), msg=f"Feature matrix missing columns: {missing}"
+        )
 
     def test_feature_matrix_row_count_matches_hgt_records(self) -> None:
         self.assertEqual(
@@ -521,11 +534,13 @@ class TestHGTDetectiveRun(unittest.TestCase):
 # 4. Edge-case: empty accessory raises ValueError
 # ---------------------------------------------------------------------------
 
+
 class TestHGTDetectiveEmptyAccessory(unittest.TestCase):
 
     def test_raises_if_no_accessory_records(self) -> None:
         """run() must raise ValueError when phase1_result has no accessory genes."""
         import pandas as pd
+
         empty_result = PangenomeResult(
             presence_absence_matrix=pd.DataFrame(),
             core_genes=pd.Index([]),
@@ -549,6 +564,7 @@ class TestHGTDetectiveEmptyAccessory(unittest.TestCase):
 # 5. Short-sequence path: kmer_deviation must be 0.0
 # ---------------------------------------------------------------------------
 
+
 class TestHGTDetectiveShortSequence(unittest.TestCase):
     """A gene whose extracted sequence is shorter than min_seq_length
     should have kmer_deviation == 0.0 (no comparison possible)."""
@@ -569,8 +585,24 @@ class TestHGTDetectiveShortSequence(unittest.TestCase):
         _write_gff(
             str(annot_dir / "short_strain.gff"),
             [
-                (contig_id, "CDS", 100, 129, "+", "short_gene_short", "hypothetical protein"),
-                (contig_id, "CDS", 200, 700, "+", "long_gene_short", "ribosomal protein"),
+                (
+                    contig_id,
+                    "CDS",
+                    100,
+                    129,
+                    "+",
+                    "short_gene_short",
+                    "hypothetical protein",
+                ),
+                (
+                    contig_id,
+                    "CDS",
+                    200,
+                    700,
+                    "+",
+                    "long_gene_short",
+                    "ribosomal protein",
+                ),
             ],
         )
 
@@ -579,8 +611,8 @@ class TestHGTDetectiveShortSequence(unittest.TestCase):
         import pandas as pd
         from pipeline.pangenome_miner import GeneRecord, PangenomeResult
 
-        short_seq = _random_dna(30, gc_frac=0.50, seed=7)   # < min_seq_length=90
-        long_seq  = _random_dna(500, gc_frac=0.50, seed=8)  # >= min_seq_length
+        short_seq = _random_dna(30, gc_frac=0.50, seed=7)  # < min_seq_length=90
+        long_seq = _random_dna(500, gc_frac=0.50, seed=8)  # >= min_seq_length
 
         short_rec = GeneRecord(
             gene_id="short_gene_short",
@@ -616,8 +648,11 @@ class TestHGTDetectiveShortSequence(unittest.TestCase):
             accessory_records=[short_rec, long_rec],
             strain_ids=["short_strain"],
             stats={
-                "n_strains": 1, "n_total_clusters": 2,
-                "n_core": 0, "n_shell": 0, "n_accessory": 2,
+                "n_strains": 1,
+                "n_total_clusters": 2,
+                "n_core": 0,
+                "n_shell": 0,
+                "n_accessory": 2,
             },
         )
 
@@ -634,6 +669,7 @@ class TestHGTDetectiveShortSequence(unittest.TestCase):
             phase1_result=phase1_result,
             fasta_store=fasta_store,
         )
+
     @classmethod
     def tearDownClass(cls) -> None:
         cls._tmpdir.cleanup()

@@ -16,7 +16,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import matplotlib
-matplotlib.use("Agg")   # headless backend — no display required
+
+matplotlib.use("Agg")  # headless backend — no display required
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # 1. Phylogenomic Presence/Absence Heatmap
 # ---------------------------------------------------------------------------
+
 
 def plot_presence_absence_heatmap(
     matrix: pd.DataFrame,
@@ -86,8 +88,11 @@ def plot_presence_absence_heatmap(
     n_strains = mat.shape[1]
     fraction = mat.sum(axis=1) / n_strains
     row_colors = fraction.map(
-        lambda f: "#c0392b" if f <= (1.0 / n_strains + 0.01)
-        else ("#27ae60" if f >= 0.95 else "#f39c12")
+        lambda f: (
+            "#c0392b"
+            if f <= (1.0 / n_strains + 0.01)
+            else ("#27ae60" if f >= 0.95 else "#f39c12")
+        )
     )
     row_colors.name = "Category"
 
@@ -135,6 +140,7 @@ def plot_presence_absence_heatmap(
 # 2.1 Rarefaction Curve
 # ---------------------------------------------------------------------------
 
+
 def plot_rarefaction_curve(
     rarefaction_data: List[float],
     output_path: Path,
@@ -142,7 +148,7 @@ def plot_rarefaction_curve(
     figsize: tuple = (8, 6),
 ) -> Path:
     """
-    Plots the rarefaction curve showing unique gene clusters discovered 
+    Plots the rarefaction curve showing unique gene clusters discovered
     as number of genomes increases.
     """
     output_path = Path(output_path)
@@ -152,7 +158,7 @@ def plot_rarefaction_curve(
     x = np.arange(1, len(rarefaction_data) + 1)
     y = np.array(rarefaction_data)
 
-    plt.plot(x, y, marker='o', linestyle='-', color="#1a7a5e", linewidth=2)
+    plt.plot(x, y, marker="o", linestyle="-", color="#1a7a5e", linewidth=2)
     plt.fill_between(x, y, alpha=0.2, color="#1a7a5e")
 
     plt.xlabel("Number of Genomes", fontsize=12)
@@ -171,6 +177,7 @@ def plot_rarefaction_curve(
 # 2. Pangenome Summary Bar Chart
 # ---------------------------------------------------------------------------
 
+
 def plot_pangenome_summary(
     stats: Dict[str, Any],
     output_path: Path,
@@ -183,29 +190,53 @@ def plot_pangenome_summary(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    fig.suptitle("PanAdapt-BGC Miner — Phase 1 Pangenome Summary", fontsize=13, fontweight="bold")
+    fig.suptitle(
+        "PanAdapt-BGC Miner — Phase 1 Pangenome Summary", fontsize=13, fontweight="bold"
+    )
 
     # --- Left: stacked bar of pangenome composition ---
     ax = axes[0]
-    categories   = ["Core\n(≥95%)", "Shell", "Accessory\n(strain-specific)"]
-    counts       = [stats["n_core"], stats["n_shell"], stats["n_accessory"]]
-    colors       = ["#27ae60", "#f39c12", "#c0392b"]
-    total        = sum(counts)
+    categories = ["Core\n(≥95%)", "Shell", "Accessory\n(strain-specific)"]
+    counts = [stats["n_core"], stats["n_shell"], stats["n_accessory"]]
+    colors = ["#27ae60", "#f39c12", "#c0392b"]
+    total = sum(counts)
 
     bars = ax.barh(["Pangenome"], [counts[0]], color=colors[0], label=categories[0])
-    ax.barh(["Pangenome"], [counts[1]], left=[counts[0]], color=colors[1], label=categories[1])
-    ax.barh(["Pangenome"], [counts[2]], left=[counts[0] + counts[1]], color=colors[2], label=categories[2])
+    ax.barh(
+        ["Pangenome"],
+        [counts[1]],
+        left=[counts[0]],
+        color=colors[1],
+        label=categories[1],
+    )
+    ax.barh(
+        ["Pangenome"],
+        [counts[2]],
+        left=[counts[0] + counts[1]],
+        color=colors[2],
+        label=categories[2],
+    )
 
     # Annotate each segment
     lefts = [0, counts[0], counts[0] + counts[1]]
     for c, l, cat in zip(counts, lefts, categories):
         if c > total * 0.03:
             pct = c / total * 100
-            ax.text(l + c / 2, 0, f"{c:,}\n({pct:.1f}%)",
-                    ha="center", va="center", fontsize=9, fontweight="bold", color="white")
+            ax.text(
+                l + c / 2,
+                0,
+                f"{c:,}\n({pct:.1f}%)",
+                ha="center",
+                va="center",
+                fontsize=9,
+                fontweight="bold",
+                color="white",
+            )
 
     ax.set_xlabel("Number of Ortholog Clusters")
-    ax.set_title(f"Pangenome Composition\n(n={stats['n_strains']} strains, {total:,} total clusters)")
+    ax.set_title(
+        f"Pangenome Composition\n(n={stats['n_strains']} strains, {total:,} total clusters)"
+    )
     ax.legend(loc="lower right", fontsize=9)
     ax.set_xlim(0, total * 1.05)
     ax.spines[["top", "right", "left"]].set_visible(False)
@@ -213,18 +244,27 @@ def plot_pangenome_summary(
 
     # --- Right: accessory genes per strain breakdown ---
     ax2 = axes[1]
-    ax2.text(0.5, 0.5,
-             f"Total Pangenome Clusters: {total:,}\n\n"
-             f"  Core genome       : {stats['n_core']:>6,} ({stats['n_core']/total*100:.1f}%)\n"
-             f"  Shell genome      : {stats['n_shell']:>6,} ({stats['n_shell']/total*100:.1f}%)\n"
-             f"  Accessory genome  : {stats['n_accessory']:>6,} ({stats['n_accessory']/total*100:.1f}%)\n\n"
-             f"Accessory gene records: {stats['n_accessory_records']:,}\n"
-             f"  → Passed to Phase 2 (HGT Detection)",
-             transform=ax2.transAxes,
-             ha="center", va="center",
-             fontsize=11,
-             fontfamily="monospace",
-             bbox=dict(boxstyle="round,pad=0.8", facecolor="#eaf4fb", edgecolor="#2980b9", linewidth=1.5))
+    ax2.text(
+        0.5,
+        0.5,
+        f"Total Pangenome Clusters: {total:,}\n\n"
+        f"  Core genome       : {stats['n_core']:>6,} ({stats['n_core']/total*100:.1f}%)\n"
+        f"  Shell genome      : {stats['n_shell']:>6,} ({stats['n_shell']/total*100:.1f}%)\n"
+        f"  Accessory genome  : {stats['n_accessory']:>6,} ({stats['n_accessory']/total*100:.1f}%)\n\n"
+        f"Accessory gene records: {stats['n_accessory_records']:,}\n"
+        f"  → Passed to Phase 2 (HGT Detection)",
+        transform=ax2.transAxes,
+        ha="center",
+        va="center",
+        fontsize=11,
+        fontfamily="monospace",
+        bbox=dict(
+            boxstyle="round,pad=0.8",
+            facecolor="#eaf4fb",
+            edgecolor="#2980b9",
+            linewidth=1.5,
+        ),
+    )
     ax2.axis("off")
     ax2.set_title("Phase 1 Statistics")
 
@@ -435,6 +475,7 @@ def render_phase1_html_report(
 
     # Make paths relative to report location for portability
     report_dir = output_path.parent
+
     def _rel(p: Path) -> str:
         try:
             return str(p.relative_to(report_dir))

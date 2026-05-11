@@ -32,10 +32,10 @@ from pipeline.pangenome_miner import (
     _sequence_for_region,
 )
 
-
 # ===========================================================================
 # Fixtures
 # ===========================================================================
+
 
 @pytest.fixture()
 def tmp_dirs():
@@ -51,7 +51,7 @@ def _write_fasta(path: Path, contig_id: str, sequence: str) -> None:
     with path.open("w") as fh:
         fh.write(f">{contig_id}\n")
         for i in range(0, len(sequence), 60):
-            fh.write(sequence[i: i + 60] + "\n")
+            fh.write(sequence[i : i + 60] + "\n")
 
 
 def _write_gff(path: Path, records: list[tuple]) -> None:
@@ -69,9 +69,12 @@ def _write_gff(path: Path, records: list[tuple]) -> None:
 # Helper / util tests
 # ===========================================================================
 
+
 class TestParseGffAttributes:
     def test_standard_gff3(self):
-        attrs = _parse_gff_attributes("ID=gene_001;product=hypothetical protein;Name=geneA")
+        attrs = _parse_gff_attributes(
+            "ID=gene_001;product=hypothetical protein;Name=geneA"
+        )
         assert attrs["ID"] == "gene_001"
         assert attrs["product"] == "hypothetical protein"
         assert attrs["Name"] == "geneA"
@@ -101,6 +104,7 @@ class TestExtractGeneId:
 # PangenomeMiner: initialisation tests
 # ===========================================================================
 
+
 class TestPangenomeMinerInit:
     def test_valid_thresholds(self):
         miner = PangenomeMiner(core_threshold=0.9, accessory_threshold=0.1)
@@ -123,6 +127,7 @@ class TestPangenomeMinerInit:
 # Integration test with synthetic data
 # ===========================================================================
 
+
 class TestPangenomeMinerIntegration:
     """End-to-end test using three synthetic strains."""
 
@@ -133,11 +138,11 @@ class TestPangenomeMinerIntegration:
     # shared_in = list of strain names that carry this gene
     GENE_DEFS = [
         (100, 399, "+", "shared_gene_1", "hypothetical protein", ["A", "B", "C"]),
-        (500, 799, "-", "shared_gene_2", "methyltransferase",    ["A", "B", "C"]),
-        (900, 1199, "+", "shared_gene_3", "permease",            ["A", "B", "C"]),
-        (1300, 1599, "+", "unique_A_1",   "transposase",         ["A"]),
-        (1700, 1999, "+", "unique_A_2",   "putative BGC gene",   ["A"]),
-        (2100, 2399, "-", "shared_AB",    "integrase",           ["A", "B"]),
+        (500, 799, "-", "shared_gene_2", "methyltransferase", ["A", "B", "C"]),
+        (900, 1199, "+", "shared_gene_3", "permease", ["A", "B", "C"]),
+        (1300, 1599, "+", "unique_A_1", "transposase", ["A"]),
+        (1700, 1999, "+", "unique_A_2", "putative BGC gene", ["A"]),
+        (2100, 2399, "-", "shared_AB", "integrase", ["A", "B"]),
     ]
 
     def _build_data(self, tmp_dirs):
@@ -147,6 +152,7 @@ class TestPangenomeMinerIntegration:
         # Build a genome where each gene slot holds a DISTINCT random sequence
         # so k-mer clustering treats them as separate orthogroups.
         rng = random.Random(0)
+
         def rand_seq(length: int) -> str:
             return "".join(rng.choices("ACGT", k=length))
 
@@ -170,11 +176,13 @@ class TestPangenomeMinerIntegration:
                     continue
                 # Embed gene-specific sequence into the contig
                 seq = gene_seqs[gene_id]
-                genome[start - 1: end] = list(seq)
+                genome[start - 1 : end] = list(seq)
                 gff_records.append(
                     (self.CONTIG_ID, "CDS", start, end, strand, gene_id, product)
                 )
-            _write_fasta(genomes_dir / f"strain_{strain}.fasta", self.CONTIG_ID, "".join(genome))
+            _write_fasta(
+                genomes_dir / f"strain_{strain}.fasta", self.CONTIG_ID, "".join(genome)
+            )
             _write_gff(annot_dir / f"strain_{strain}.gff", gff_records)
 
         return genomes_dir, annot_dir
@@ -191,29 +199,41 @@ class TestPangenomeMinerIntegration:
 
     def test_matrix_has_correct_dimensions(self, tmp_dirs):
         genomes_dir, annot_dir = self._build_data(tmp_dirs)
-        miner = PangenomeMiner(core_threshold=0.95, accessory_threshold=0.40, identity_threshold=0.70)
+        miner = PangenomeMiner(
+            core_threshold=0.95, accessory_threshold=0.40, identity_threshold=0.70
+        )
         result = miner.run(genomes_dir, annot_dir)
         # 3 strains in columns
-        assert set(result.presence_absence_matrix.columns) == {"strain_A", "strain_B", "strain_C"}
+        assert set(result.presence_absence_matrix.columns) == {
+            "strain_A",
+            "strain_B",
+            "strain_C",
+        }
         assert len(result.presence_absence_matrix) > 0
 
     def test_core_genes_identified(self, tmp_dirs):
         genomes_dir, annot_dir = self._build_data(tmp_dirs)
-        miner = PangenomeMiner(core_threshold=0.95, accessory_threshold=0.40, identity_threshold=0.70)
+        miner = PangenomeMiner(
+            core_threshold=0.95, accessory_threshold=0.40, identity_threshold=0.70
+        )
         result = miner.run(genomes_dir, annot_dir)
         # shared_gene_1/2/3 are present in 100% strains → must be core
         assert len(result.core_genes) >= 3
 
     def test_accessory_genes_are_strain_specific(self, tmp_dirs):
         genomes_dir, annot_dir = self._build_data(tmp_dirs)
-        miner = PangenomeMiner(core_threshold=0.95, accessory_threshold=0.40, identity_threshold=0.70)
+        miner = PangenomeMiner(
+            core_threshold=0.95, accessory_threshold=0.40, identity_threshold=0.70
+        )
         result = miner.run(genomes_dir, annot_dir)
         # unique_A_1 and unique_A_2 are only in strain_A (33%) — accessory
         assert len(result.accessory_genes) >= 2
 
     def test_accessory_records_are_gene_record_objects(self, tmp_dirs):
         genomes_dir, annot_dir = self._build_data(tmp_dirs)
-        miner = PangenomeMiner(core_threshold=0.95, accessory_threshold=0.40, identity_threshold=0.70)
+        miner = PangenomeMiner(
+            core_threshold=0.95, accessory_threshold=0.40, identity_threshold=0.70
+        )
         result = miner.run(genomes_dir, annot_dir)
         for rec in result.accessory_records:
             assert isinstance(rec, GeneRecord)
@@ -222,14 +242,24 @@ class TestPangenomeMinerIntegration:
 
     def test_stats_keys_present(self, tmp_dirs):
         genomes_dir, annot_dir = self._build_data(tmp_dirs)
-        miner = PangenomeMiner(core_threshold=0.95, accessory_threshold=0.40, identity_threshold=0.70)
+        miner = PangenomeMiner(
+            core_threshold=0.95, accessory_threshold=0.40, identity_threshold=0.70
+        )
         result = miner.run(genomes_dir, annot_dir)
-        for key in ("n_strains", "n_total_clusters", "n_core", "n_shell", "n_accessory"):
+        for key in (
+            "n_strains",
+            "n_total_clusters",
+            "n_core",
+            "n_shell",
+            "n_accessory",
+        ):
             assert key in result.stats
 
     def test_save_and_reload_matrix(self, tmp_dirs):
         genomes_dir, annot_dir = self._build_data(tmp_dirs)
-        miner = PangenomeMiner(core_threshold=0.95, accessory_threshold=0.40, identity_threshold=0.70)
+        miner = PangenomeMiner(
+            core_threshold=0.95, accessory_threshold=0.40, identity_threshold=0.70
+        )
         result = miner.run(genomes_dir, annot_dir)
 
         out_csv = genomes_dir.parent / "matrix.csv"
@@ -253,6 +283,7 @@ class TestPangenomeMinerIntegration:
 # Test rarefaction and Heaps' Law calculations
 # ===========================================================================
 
+
 class TestPangenomeAnalytics:
     """Test advanced analytics: rarefaction curves and Heaps' Law."""
 
@@ -260,7 +291,7 @@ class TestPangenomeAnalytics:
         """Test rarefaction curve calculation."""
         genomes_dir, annot_dir = tmp_dirs
         strains = ["A", "B", "C"]
-        
+
         # Build simple data
         CONTIG_ID = "ctg1"
         GENE_DEFS = [
@@ -268,12 +299,13 @@ class TestPangenomeAnalytics:
             (500, 799, "-", "gene2", "protein2", ["A", "B"]),  # Present in A, B
             (900, 1199, "+", "gene3", "protein3", ["C"]),  # Present in C only
         ]
-        
+
         from pathlib import Path
         import random
+
         rng = random.Random(42)
         rand_seq = lambda l: "".join(rng.choices("ACGT", k=l))
-        
+
         for strain in strains:
             genome = list(rand_seq(2000))
             gff_records = []
@@ -281,27 +313,33 @@ class TestPangenomeAnalytics:
                 if strain not in shared_in:
                     continue
                 seq = rand_seq(end - start + 1)
-                genome[start - 1:end] = list(seq)
-                gff_records.append((CONTIG_ID, "CDS", start, end, strand, gene_id, product))
-            
-            _write_fasta(genomes_dir / f"strain_{strain}.fasta", CONTIG_ID, "".join(genome))
+                genome[start - 1 : end] = list(seq)
+                gff_records.append(
+                    (CONTIG_ID, "CDS", start, end, strand, gene_id, product)
+                )
+
+            _write_fasta(
+                genomes_dir / f"strain_{strain}.fasta", CONTIG_ID, "".join(genome)
+            )
             _write_gff(annot_dir / f"strain_{strain}.gff", gff_records)
-        
+
         miner = PangenomeMiner(core_threshold=0.9, accessory_threshold=0.1)
         miner.run(genomes_dir, annot_dir)
-        
+
         # Test rarefaction calculation
         rarefaction = miner.calculate_rarefaction(iterations=5)
         assert len(rarefaction) == 3  # 3 strains
         assert all(rarefaction > 0)
         # Rarefaction should be non-decreasing
-        assert all(rarefaction[i] <= rarefaction[i+1] for i in range(len(rarefaction)-1))
+        assert all(
+            rarefaction[i] <= rarefaction[i + 1] for i in range(len(rarefaction) - 1)
+        )
 
     def test_heaps_law_calculation(self, tmp_dirs):
         """Test Heaps' Law calculation."""
         genomes_dir, annot_dir = tmp_dirs
         strains = ["A", "B", "C"]
-        
+
         CONTIG_ID = "ctg1"
         # Define genes to ensure pangenome is "open"
         GENE_DEFS = [
@@ -311,12 +349,13 @@ class TestPangenomeAnalytics:
             (1300, 1599, "+", "gene4", "protein4", ["B"]),
             (1700, 1999, "+", "gene5", "protein5", ["C"]),
         ]
-        
+
         from pathlib import Path
         import random
+
         rng = random.Random(42)
         rand_seq = lambda l: "".join(rng.choices("ACGT", k=l))
-        
+
         for strain in strains:
             genome = list(rand_seq(3000))
             gff_records = []
@@ -324,15 +363,19 @@ class TestPangenomeAnalytics:
                 if strain not in shared_in:
                     continue
                 seq = rand_seq(end - start + 1)
-                genome[start - 1:end] = list(seq)
-                gff_records.append((CONTIG_ID, "CDS", start, end, strand, gene_id, product))
-            
-            _write_fasta(genomes_dir / f"strain_{strain}.fasta", CONTIG_ID, "".join(genome))
+                genome[start - 1 : end] = list(seq)
+                gff_records.append(
+                    (CONTIG_ID, "CDS", start, end, strand, gene_id, product)
+                )
+
+            _write_fasta(
+                genomes_dir / f"strain_{strain}.fasta", CONTIG_ID, "".join(genome)
+            )
             _write_gff(annot_dir / f"strain_{strain}.gff", gff_records)
-        
+
         miner = PangenomeMiner(core_threshold=0.9, accessory_threshold=0.1)
         miner.run(genomes_dir, annot_dir)
-        
+
         # Check Heaps' Law stats
         assert "heaps_law" in miner.stats
         heaps = miner.stats["heaps_law"]
@@ -347,17 +390,18 @@ class TestPangenomeAnalytics:
         """Test that Heaps' Law failures are handled gracefully."""
         genomes_dir, annot_dir = tmp_dirs
         strains = ["A", "B"]
-        
+
         CONTIG_ID = "ctg1"
         GENE_DEFS = [
             (100, 399, "+", "gene1", "protein1", strains),
         ]
-        
+
         from pathlib import Path
         import random
+
         rng = random.Random(42)
         rand_seq = lambda l: "".join(rng.choices("ACGT", k=l))
-        
+
         for strain in strains:
             genome = list(rand_seq(1000))
             gff_records = []
@@ -365,21 +409,25 @@ class TestPangenomeAnalytics:
                 if strain not in shared_in:
                     continue
                 seq = rand_seq(end - start + 1)
-                genome[start - 1:end] = list(seq)
-                gff_records.append((CONTIG_ID, "CDS", start, end, strand, gene_id, product))
-            
-            _write_fasta(genomes_dir / f"strain_{strain}.fasta", CONTIG_ID, "".join(genome))
+                genome[start - 1 : end] = list(seq)
+                gff_records.append(
+                    (CONTIG_ID, "CDS", start, end, strand, gene_id, product)
+                )
+
+            _write_fasta(
+                genomes_dir / f"strain_{strain}.fasta", CONTIG_ID, "".join(genome)
+            )
             _write_gff(annot_dir / f"strain_{strain}.gff", gff_records)
-        
+
         # Force curve_fit to raise an exception to test error handling
         def mock_curve_fit(*args, **kwargs):
             raise RuntimeError("Simulated failure")
-        
+
         monkeypatch.setattr("scipy.optimize.curve_fit", mock_curve_fit)
-        
+
         miner = PangenomeMiner(core_threshold=0.9, accessory_threshold=0.1)
         miner.run(genomes_dir, annot_dir)
-        
+
         # Even if curve_fit fails, we should still have stats with defaults
         assert "heaps_law" in miner.stats
         heaps = miner.stats["heaps_law"]

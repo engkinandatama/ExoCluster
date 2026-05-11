@@ -59,6 +59,7 @@ try:
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
+
     _TORCH_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _TORCH_AVAILABLE = False
@@ -77,6 +78,7 @@ try:
         from bgc_prophet.train.model import TransformerEncoderNet
         from bgc_prophet.train.classifier import TransformerClassifier
         from Bio.Seq import Seq
+
         _PROPHET_AVAILABLE = True
 except ImportError:
     pass
@@ -100,6 +102,7 @@ logger = logging.getLogger(__name__)
 # Utility functions
 # ---------------------------------------------------------------------------
 
+
 def _translate_cds(dna_seq: str) -> Optional[str]:
     """
     Translate a CDS DNA sequence to a protein amino acid sequence.
@@ -111,9 +114,7 @@ def _translate_cds(dna_seq: str) -> Optional[str]:
 
     # Clean: uppercase, remove whitespace, replace invalid chars with N
     dna_clean = "".join(
-        c if c in "ATGCN" else "N"
-        for c in dna_seq.upper()
-        if c not in " \n\r\t"
+        c if c in "ATGCN" else "N" for c in dna_seq.upper() if c not in " \n\r\t"
     )
 
     # Custom translation:
@@ -124,7 +125,7 @@ def _translate_cds(dna_seq: str) -> Optional[str]:
     protein_parts = []
     i = 0
     while i < len(dna_clean):
-        if dna_clean[i:i+3] == "ATG":
+        if dna_clean[i : i + 3] == "ATG":
             protein_parts.append("M")
             i += 3
         elif dna_clean[i] == "N":
@@ -141,6 +142,7 @@ def _translate_cds(dna_seq: str) -> Optional[str]:
     if len(protein) < 10:
         return None
     return protein
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -161,7 +163,13 @@ N_CLASSES = len(BGC_CLASSES)
 
 # BGC-Prophet's classifier output labels (7 classes, no NonBGC)
 _PROPHET_TYPE_LABELS: List[str] = [
-    "Alkaloid", "Terpene", "NRP", "Polyketide", "RiPP", "Saccharide", "Other",
+    "Alkaloid",
+    "Terpene",
+    "NRP",
+    "Polyketide",
+    "RiPP",
+    "Saccharide",
+    "Other",
 ]
 
 # Feature vector dimensionality (for mock MLP feature extractor)
@@ -172,7 +180,7 @@ N_FEATURES = 4 + 1 + 1 + 2 + 10 + 10  # = 28
 
 # BGC confidence thresholds
 HIGH_CONF_THRESHOLD = 0.65
-MED_CONF_THRESHOLD  = 0.40
+MED_CONF_THRESHOLD = 0.40
 
 # Annotator threshold: genes with probability above this are considered BGC
 _ANNOTATOR_THRESHOLD = 0.5
@@ -187,55 +195,55 @@ _PROPHET_WINDOW_SIZE = 128
 
 # ESM2 model configuration — defaults (can be overridden at runtime)
 _ESM2_MODEL_NAME = "esm2_t6_8M_UR50D"
-_ESM2_REPR_LAYER = 6     # last layer of 6-layer model
-_ESM2_EMBED_DIM  = 320   # output embedding dimension
-_ESM2_MAX_SEQ_LEN = 1022 # max sequence length for ESM2
+_ESM2_REPR_LAYER = 6  # last layer of 6-layer model
+_ESM2_EMBED_DIM = 320  # output embedding dimension
+_ESM2_MAX_SEQ_LEN = 1022  # max sequence length for ESM2
 
 # ── ESM2 model registry ──────────────────────────────────────────────────
 # Maps model short-names → (pretrained loader name, num_layers, embed_dim)
 # Any model listed here can be selected at runtime via ``esm_model_name``.
 ESM2_REGISTRY: Dict[str, Dict[str, Any]] = {
-    "esm2_t6_8M_UR50D":    {"layers": 6,  "embed_dim": 320,  "params": "8M"},
-    "esm2_t12_35M_UR50D":  {"layers": 12, "embed_dim": 480,  "params": "35M"},
-    "esm2_t30_150M_UR50D": {"layers": 30, "embed_dim": 640,  "params": "150M"},
+    "esm2_t6_8M_UR50D": {"layers": 6, "embed_dim": 320, "params": "8M"},
+    "esm2_t12_35M_UR50D": {"layers": 12, "embed_dim": 480, "params": "35M"},
+    "esm2_t30_150M_UR50D": {"layers": 30, "embed_dim": 640, "params": "150M"},
     "esm2_t33_650M_UR50D": {"layers": 33, "embed_dim": 1280, "params": "650M"},
-    "esm2_t36_3B_UR50D":   {"layers": 36, "embed_dim": 2560, "params": "3B"},
-    "esm2_t48_15B_UR50D":  {"layers": 48, "embed_dim": 5120, "params": "15B"},
+    "esm2_t36_3B_UR50D": {"layers": 36, "embed_dim": 2560, "params": "3B"},
+    "esm2_t48_15B_UR50D": {"layers": 48, "embed_dim": 5120, "params": "15B"},
 }
 
 # Heuristic keyword → BGC class boosts (applied to logits/probabilities)
 # Maps product/note field keywords to (class_index, boost_weight)
 BGC_KEYWORD_MAP: Dict[str, Tuple[int, float]] = {
     # NRP (index 3)
-    "nrps":           (3, 0.30),
-    "non-ribosomal":  (3, 1.50),
-    "condensation":   (3, 0.25),
-    "adenylation":    (3, 0.25),
+    "nrps": (3, 0.30),
+    "non-ribosomal": (3, 1.50),
+    "condensation": (3, 0.25),
+    "adenylation": (3, 0.25),
     # Polyketide (index 4)
-    "pks":            (4, 0.30),
-    "polyketide":     (4, 0.25),
-    "ketosynthase":   (4, 0.25),
-    "acyltransferase":(4, 0.20),
-    "type ii pks":    (4, 0.30),
-    "cyclase":        (4, 0.20),
+    "pks": (4, 0.30),
+    "polyketide": (4, 0.25),
+    "ketosynthase": (4, 0.25),
+    "acyltransferase": (4, 0.20),
+    "type ii pks": (4, 0.30),
+    "cyclase": (4, 0.20),
     # Terpene (index 2)
-    "terpene":        (2, 0.35),
-    "geranyl":        (2, 0.20),
-    "sesquiterpene":  (2, 0.25),
+    "terpene": (2, 0.35),
+    "geranyl": (2, 0.20),
+    "sesquiterpene": (2, 0.25),
     # RiPP (index 5)
-    "lanthipeptide":  (5, 0.30),
-    "ripp":           (5, 0.30),
-    "bacteriocin":    (5, 0.25),
+    "lanthipeptide": (5, 0.30),
+    "ripp": (5, 0.30),
+    "bacteriocin": (5, 0.25),
     # Other (index 7)
-    "siderophore":    (7, 0.25),
-    "ectoine":        (7, 0.25),
-    "nucleoside":     (7, 0.20),
+    "siderophore": (7, 0.25),
+    "ectoine": (7, 0.25),
+    "nucleoside": (7, 0.20),
     # Alkaloid (index 1)
-    "alkaloid":       (1, 0.30),
-    "indole":         (1, 0.20),
+    "alkaloid": (1, 0.30),
+    "indole": (1, 0.20),
     # Saccharide (index 6)
-    "saccharide":     (6, 0.25),
-    "glycosyl":       (6, 0.20),
+    "saccharide": (6, 0.25),
+    "glycosyl": (6, 0.20),
 }
 
 
@@ -243,18 +251,19 @@ BGC_KEYWORD_MAP: Dict[str, Tuple[int, float]] = {
 # Data containers
 # ===========================================================================
 
+
 @dataclass
 class BGCGeneRecord:
     """Phase 3 output: an HGT-flagged gene annotated with BGC prediction."""
 
     hgt_record: HGTGeneRecord
-    bgc_class: str              # Predicted BGC class label (e.g. "NRP")
-    bgc_class_idx: int          # Integer index into BGC_CLASSES
-    confidence: float           # Probability of predicted class [0,1]
-    class_scores: List[float]   # Full distribution over all BGC classes
-    is_bgc: bool                # True if bgc_class != "NonBGC" and confidence >= MED
-    confidence_tier: str        # "High", "Medium", "Low"
-    keyword_hits: List[str]     # Product/note keywords that boosted the score
+    bgc_class: str  # Predicted BGC class label (e.g. "NRP")
+    bgc_class_idx: int  # Integer index into BGC_CLASSES
+    confidence: float  # Probability of predicted class [0,1]
+    class_scores: List[float]  # Full distribution over all BGC classes
+    is_bgc: bool  # True if bgc_class != "NonBGC" and confidence >= MED
+    confidence_tier: str  # "High", "Medium", "Low"
+    keyword_hits: List[str]  # Product/note keywords that boosted the score
 
     # Convenience passthrough accessors
     @property
@@ -274,18 +283,19 @@ class BGCGeneRecord:
 class BGCResult:
     """Full Phase 3 output — passed to Phase 3 visualizer and final report."""
 
-    bgc_records: List[BGCGeneRecord]        # All scored alien records
-    bgc_hits: List[BGCGeneRecord]           # Subset: is_bgc=True
-    class_distribution: Dict[str, int]      # {class_label: count}
-    strain_bgc_counts: Dict[str, int]       # {strain_id: bgc_count}
-    feature_matrix: pd.DataFrame            # genes × input features
-    prediction_matrix: pd.DataFrame         # genes × class scores
+    bgc_records: List[BGCGeneRecord]  # All scored alien records
+    bgc_hits: List[BGCGeneRecord]  # Subset: is_bgc=True
+    class_distribution: Dict[str, int]  # {class_label: count}
+    strain_bgc_counts: Dict[str, int]  # {strain_id: bgc_count}
+    feature_matrix: pd.DataFrame  # genes × input features
+    prediction_matrix: pd.DataFrame  # genes × class scores
     stats: Dict[str, Any] = field(default_factory=dict)
 
 
 # ===========================================================================
 # Feature extraction (used by both backends)
 # ===========================================================================
+
 
 class BGCFeatureExtractor:
     """
@@ -316,11 +326,11 @@ class BGCFeatureExtractor:
             return np.zeros((0, N_FEATURES), dtype=np.float32)
 
         # --- Collect per-gene scalars ---
-        gc_vals    = np.array([r.gc_content     for r in records], dtype=np.float32)
-        gc_dev     = np.array([r.gc_deviation   for r in records], dtype=np.float32)
-        kmer_dev   = np.array([r.kmer_deviation for r in records], dtype=np.float32)
-        anom       = np.array([r.anomaly_score  for r in records], dtype=np.float32)
-        mge_prox   = np.array([float(r.mge_proximity) for r in records], dtype=np.float32)
+        gc_vals = np.array([r.gc_content for r in records], dtype=np.float32)
+        gc_dev = np.array([r.gc_deviation for r in records], dtype=np.float32)
+        kmer_dev = np.array([r.kmer_deviation for r in records], dtype=np.float32)
+        anom = np.array([r.anomaly_score for r in records], dtype=np.float32)
+        mge_prox = np.array([float(r.mge_proximity) for r in records], dtype=np.float32)
 
         # Gene length: derive from GeneRecord coordinates
         gene_len_log = np.array(
@@ -332,19 +342,23 @@ class BGCFeatureExtractor:
         )
 
         # Placeholder neighborhood features
-        upstream   = np.zeros(len(records), dtype=np.float32)
+        upstream = np.zeros(len(records), dtype=np.float32)
         downstream = np.zeros(len(records), dtype=np.float32)
 
         # --- Context histograms (same value for all records — population context) ---
-        self._gc_bins   = np.histogram(gc_vals,  bins=10, range=(0.0, 1.0))[0].astype(np.float32)
-        self._kmer_bins = np.histogram(kmer_dev, bins=10, range=(0.0, 1.0))[0].astype(np.float32)
+        self._gc_bins = np.histogram(gc_vals, bins=10, range=(0.0, 1.0))[0].astype(
+            np.float32
+        )
+        self._kmer_bins = np.histogram(kmer_dev, bins=10, range=(0.0, 1.0))[0].astype(
+            np.float32
+        )
         # Normalise to sum=1
         _norm = lambda x: x / (x.sum() + 1e-9)
-        gc_hist   = _norm(self._gc_bins)
+        gc_hist = _norm(self._gc_bins)
         kmer_hist = _norm(self._kmer_bins)
 
         # Clip deviations to [0,1] for numerical stability
-        gc_dev   = np.clip(gc_dev,  0.0, 1.0)
+        gc_dev = np.clip(gc_dev, 0.0, 1.0)
         kmer_dev = np.clip(kmer_dev, 0.0, 1.0)
         # Normalise anomaly score to [0,1]
         anom_min, anom_max = anom.min(), anom.max()
@@ -354,15 +368,22 @@ class BGCFeatureExtractor:
             anom_norm = np.zeros_like(anom)
 
         # --- Assemble feature matrix ---
-        per_gene = np.column_stack([
-            gc_vals, gc_dev, kmer_dev, anom_norm,
-            mge_prox, gene_len_log,
-            upstream, downstream,
-        ])  # shape (n, 8)
+        per_gene = np.column_stack(
+            [
+                gc_vals,
+                gc_dev,
+                kmer_dev,
+                anom_norm,
+                mge_prox,
+                gene_len_log,
+                upstream,
+                downstream,
+            ]
+        )  # shape (n, 8)
 
         # Broadcast histograms as context features (same row for all genes)
         n = len(records)
-        gc_hist_mat   = np.tile(gc_hist,   (n, 1))  # (n, 10)
+        gc_hist_mat = np.tile(gc_hist, (n, 1))  # (n, 10)
         kmer_hist_mat = np.tile(kmer_hist, (n, 1))  # (n, 10)
 
         X = np.concatenate([per_gene, gc_hist_mat, kmer_hist_mat], axis=1)  # (n, 28)
@@ -373,6 +394,7 @@ class BGCFeatureExtractor:
 # ===========================================================================
 # BGC-Prophet Backend (trained model)
 # ===========================================================================
+
 
 class ProphetBackend:
     """
@@ -445,7 +467,9 @@ class ProphetBackend:
         # ── Load ESM2 model ───────────────────────────────────────────
         logger.info(
             "Loading ESM2 model '%s' (~%s params, %d-dim embeddings) ...",
-            esm_model_name, spec["params"], self._esm_embed_dim,
+            esm_model_name,
+            spec["params"],
+            self._esm_embed_dim,
         )
         loader_fn = getattr(esm.pretrained, esm_model_name, None)
         if loader_fn is None:
@@ -475,17 +499,17 @@ class ProphetBackend:
         nhead = 5
         self._annotator_threshold: float = _ANNOTATOR_THRESHOLD
 
-        _is_default_8m = (esm_model_name == "esm2_t6_8M_UR50D")
+        _is_default_8m = esm_model_name == "esm2_t6_8M_UR50D"
 
         if _is_default_8m:
             # Official upstream weights in model_dir root
-            annotator_path  = model_dir / "annotator.pt"
+            annotator_path = model_dir / "annotator.pt"
             classifier_path = model_dir / "classifier.pt"
             weight_source = "upstream pre-trained (BGC-Prophet)"
         else:
             # User-trained weights in a model-specific subfolder
             model_specific_dir = model_dir / esm_model_name
-            annotator_path  = model_specific_dir / "annotator.pt"
+            annotator_path = model_specific_dir / "annotator.pt"
             classifier_path = model_specific_dir / "classifier.pt"
             weight_source = f"user-trained ({esm_model_name} subfolder)"
 
@@ -510,33 +534,57 @@ class ProphetBackend:
 
         logger.info(
             "Loading weights for '%s' (d_model=%d, nhead=%d) — %s",
-            esm_model_name, d_model, nhead, weight_source,
+            esm_model_name,
+            d_model,
+            nhead,
+            weight_source,
         )
 
         # ── Load Annotator (TransformerEncoderNet) ────────────────────
         self._annotator = TransformerEncoderNet(
-            d_model=d_model, nhead=nhead, num_encoder_layers=2,
-            max_len=_PROPHET_WINDOW_SIZE, dim_feedforward=dim_ff,
+            d_model=d_model,
+            nhead=nhead,
+            num_encoder_layers=2,
+            max_len=_PROPHET_WINDOW_SIZE,
+            dim_feedforward=dim_ff,
         )
         self._annotator.load_state_dict(
-            torch.load(str(annotator_path), map_location=self.device, weights_only=False)
+            torch.load(
+                str(annotator_path), map_location=self.device, weights_only=False
+            )
         )
         self._annotator = self._annotator.to(self.device)
         self._annotator.eval()
-        logger.info("BGC-Prophet annotator loaded: %s (d_model=%d, nhead=%d)", annotator_path, d_model, nhead)
+        logger.info(
+            "BGC-Prophet annotator loaded: %s (d_model=%d, nhead=%d)",
+            annotator_path,
+            d_model,
+            nhead,
+        )
 
         # ── Load Classifier (TransformerClassifier) ───────────────────
         self._classifier = TransformerClassifier(
-            d_model=d_model, nhead=nhead, num_encoder_layers=2,
-            max_len=_PROPHET_WINDOW_SIZE, dim_feedforward=dim_ff,
+            d_model=d_model,
+            nhead=nhead,
+            num_encoder_layers=2,
+            max_len=_PROPHET_WINDOW_SIZE,
+            dim_feedforward=dim_ff,
             labels_num=len(_PROPHET_TYPE_LABELS),
         )
         self._classifier.load_state_dict(
-            torch.load(str(classifier_path), map_location=self.device, weights_only=False)
+            torch.load(
+                str(classifier_path), map_location=self.device, weights_only=False
+            )
         )
         self._classifier = self._classifier.to(self.device)
         self._classifier.eval()
-        logger.info("BGC-Prophet classifier loaded: %s (d_model=%d, nhead=%d)", classifier_path, d_model, nhead)
+        logger.info(
+            "BGC-Prophet classifier loaded: %s (d_model=%d, nhead=%d)",
+            classifier_path,
+            d_model,
+            nhead,
+        )
+
     # ------------------------------------------------------------------
     # Step 1: DNA → Protein translation
     # ------------------------------------------------------------------
@@ -552,9 +600,7 @@ class ProphetBackend:
 
         # Clean: uppercase, remove whitespace, replace invalid chars with N
         dna_clean = "".join(
-            c if c in "ATGCN" else "N"
-            for c in dna_seq.upper()
-            if c not in " \n\r\t"
+            c if c in "ATGCN" else "N" for c in dna_seq.upper() if c not in " \n\r\t"
         )
 
         # Custom translation:
@@ -565,7 +611,7 @@ class ProphetBackend:
         protein_parts = []
         i = 0
         while i < len(dna_clean):
-            if dna_clean[i:i+3] == "ATG":
+            if dna_clean[i : i + 3] == "ATG":
                 protein_parts.append("M")
                 i += 3
             elif dna_clean[i] == "N":
@@ -631,14 +677,17 @@ class ProphetBackend:
                 seq_len = min(len(seq_str), _ESM2_MAX_SEQ_LEN)
                 # Tokens: [BOS, aa1, aa2, ..., aaN, EOS, PAD, PAD, ...]
                 # We want mean of positions 1..seq_len (inclusive)
-                token_repr = representations[j, 1:seq_len + 1, :]  # (seq_len, embed_dim)
+                token_repr = representations[
+                    j, 1 : seq_len + 1, :
+                ]  # (seq_len, embed_dim)
                 mean_repr = token_repr.mean(dim=0)  # (embed_dim,)
 
                 embeddings[label] = mean_repr.cpu().numpy()
 
             if batch_end % (batch_size * 5) == 0 or batch_end == total:
-                logger.info("  ESM2 embedding progress: %d/%d proteins", batch_end, total)
-
+                logger.info(
+                    "  ESM2 embedding progress: %d/%d proteins", batch_end, total
+                )
 
         return embeddings
 
@@ -652,9 +701,7 @@ class ProphetBackend:
         embeddings: Dict[str, np.ndarray],
     ) -> Tuple[List[List[int]], np.ndarray, np.ndarray]:
         valid_pairs = [
-            (i, rec)
-            for i, rec in enumerate(gene_records)
-            if rec.gene_id in embeddings
+            (i, rec) for i, rec in enumerate(gene_records) if rec.gene_id in embeddings
         ]
 
         valid_pairs.sort(
@@ -669,8 +716,11 @@ class ProphetBackend:
 
         if not valid_pairs:
             embed_dim = self._esm_embed_dim
-            return [], np.zeros((0, _PROPHET_WINDOW_SIZE, embed_dim)), \
-                   np.ones((0, _PROPHET_WINDOW_SIZE), dtype=bool)
+            return (
+                [],
+                np.zeros((0, _PROPHET_WINDOW_SIZE, embed_dim)),
+                np.ones((0, _PROPHET_WINDOW_SIZE), dtype=bool),
+            )
 
         all_window_indices: List[List[int]] = []
         current_group: List[int] = []
@@ -809,7 +859,9 @@ class ProphetBackend:
         selected_classes = []
         selected_probs = []
 
-        for i, (is_above, label) in enumerate(zip(above_threshold, _PROPHET_TYPE_LABELS)):
+        for i, (is_above, label) in enumerate(
+            zip(above_threshold, _PROPHET_TYPE_LABELS)
+        ):
             if is_above:
                 selected_classes.append(label)
                 selected_probs.append(float(type_probs[i]))
@@ -827,7 +879,9 @@ class ProphetBackend:
             primary_label = "Other"
             primary_conf = 1.0 - float(np.max(type_probs))
 
-        cls_idx = BGC_CLASSES.index(primary_label) if primary_label in BGC_CLASSES else 7
+        cls_idx = (
+            BGC_CLASSES.index(primary_label) if primary_label in BGC_CLASSES else 7
+        )
         class_scores = [0.0] + [float(prob) for prob in type_probs]
         return primary_label, cls_idx, primary_conf, class_scores
 
@@ -851,7 +905,11 @@ class ProphetBackend:
             is_bgc_flags:  list of boolean BGC flags
         """
         n_genes = len(alien_records)
-        context_records = list(all_gene_records) if all_gene_records else [r.gene_record for r in alien_records]
+        context_records = (
+            list(all_gene_records)
+            if all_gene_records
+            else [r.gene_record for r in alien_records]
+        )
         logger.info(
             "Prophet backend: processing %d alien genes with %d contextual genes",
             n_genes,
@@ -906,8 +964,11 @@ class ProphetBackend:
         window_record_indices, window_embs, pad_masks = self._create_windows(
             context_records, embeddings
         )
-        logger.info("  Created %d windows of %d genes",
-                     len(window_record_indices), _PROPHET_WINDOW_SIZE)
+        logger.info(
+            "  Created %d windows of %d genes",
+            len(window_record_indices),
+            _PROPHET_WINDOW_SIZE,
+        )
 
         # Step 4: Annotator inference
         logger.info("  Running annotator ...")
@@ -932,16 +993,23 @@ class ProphetBackend:
 
             start_idx, end_idx = span
             region_mask = np.zeros((1, valid_len), dtype=np.float32)
-            region_mask[0, start_idx:end_idx + 1] = 1.0
+            region_mask[0, start_idx : end_idx + 1] = 1.0
             type_probs = self._run_classifier(
-                window_embs[w_idx:w_idx + 1, :valid_len, :],
+                window_embs[w_idx : w_idx + 1, :valid_len, :],
                 region_mask,
             )[0]
-            region_label, region_cls_idx, region_conf, region_scores = self._classify_region(type_probs)
+            region_label, region_cls_idx, region_conf, region_scores = (
+                self._classify_region(type_probs)
+            )
 
             for g_idx, rec_idx in enumerate(record_indices):
                 if start_idx <= g_idx <= end_idx:
-                    gene_results[rec_idx] = (region_label, region_cls_idx, region_conf, region_scores)
+                    gene_results[rec_idx] = (
+                        region_label,
+                        region_cls_idx,
+                        region_conf,
+                        region_scores,
+                    )
                 else:
                     bgc_prob = float(annotator_probs[w_idx, g_idx])
                     gene_results[rec_idx] = (
@@ -951,7 +1019,9 @@ class ProphetBackend:
                         [1.0 - bgc_prob] + [0.0] * len(_PROPHET_TYPE_LABELS),
                     )
 
-        context_predictions: Dict[Tuple[str, str, str, int, int], Tuple[str, int, float, List[float]]] = {}
+        context_predictions: Dict[
+            Tuple[str, str, str, int, int], Tuple[str, int, float, List[float]]
+        ] = {}
         for rec_idx, result in gene_results.items():
             context_predictions[_gene_key(context_records[rec_idx])] = result
 
@@ -994,6 +1064,7 @@ class ProphetBackend:
 # ===========================================================================
 
 if _TORCH_AVAILABLE:
+
     class BGCClassifier(nn.Module):
         """
         4-layer MLP for BGC-type classification (mock/fallback).
@@ -1015,17 +1086,14 @@ if _TORCH_AVAILABLE:
                 nn.LayerNorm(64),
                 nn.ReLU(),
                 nn.Dropout(p=0.3),
-
                 nn.Linear(64, 128),
                 nn.LayerNorm(128),
                 nn.ReLU(),
                 nn.Dropout(p=0.3),
-
                 nn.Linear(128, 64),
                 nn.LayerNorm(64),
                 nn.ReLU(),
                 nn.Dropout(p=0.2),
-
                 nn.Linear(64, n_classes),
             )
 
@@ -1054,6 +1122,7 @@ def _torch_inference(model: "BGCClassifier", X: np.ndarray) -> np.ndarray:
 # NumPy mock inference (fallback when PyTorch unavailable)
 # ===========================================================================
 
+
 def _numpy_mock_inference(X: np.ndarray, seed: int = 42) -> np.ndarray:
     """
     Deterministic NumPy mock of the MLP forward pass.
@@ -1078,6 +1147,7 @@ def _numpy_mock_inference(X: np.ndarray, seed: int = 42) -> np.ndarray:
 # Keyword boost (heuristic annotation signal)
 # ===========================================================================
 
+
 def _apply_keyword_boosts(
     records: List[HGTGeneRecord],
     logits: np.ndarray,
@@ -1097,7 +1167,7 @@ def _apply_keyword_boosts(
     for i, rec in enumerate(records):
         hits: List[str] = []
         product = (rec.gene_record.product or "").lower()
-        text    = product
+        text = product
 
         for kw, (cls_idx, boost) in BGC_KEYWORD_MAP.items():
             if kw in text:
@@ -1151,6 +1221,7 @@ def _apply_keyword_boosts_to_scores(
 # ===========================================================================
 # BGCPredictor orchestrator
 # ===========================================================================
+
 
 class BGCPredictor:
     """
@@ -1227,7 +1298,8 @@ class BGCPredictor:
                 except Exception as e:
                     logger.warning(
                         "BGCPredictor: Failed to load BGC-Prophet backend: %s. "
-                        "Falling back to mock inference.", e
+                        "Falling back to mock inference.",
+                        e,
                     )
             else:
                 missing = []
@@ -1237,7 +1309,9 @@ class BGCPredictor:
                     missing.append("classifier.pt")
                 logger.warning(
                     "BGCPredictor: Model weights not found (%s) in %s. "
-                    "Using mock inference.", ", ".join(missing), model_dir
+                    "Using mock inference.",
+                    ", ".join(missing),
+                    model_dir,
                 )
 
         # Mock fallback
@@ -1249,9 +1323,7 @@ class BGCPredictor:
                 )
             else:
                 self._model = None
-                logger.info(
-                    "BGCPredictor: NumPy mock inference active (no PyTorch)"
-                )
+                logger.info("BGCPredictor: NumPy mock inference active (no PyTorch)")
 
         self._extractor = BGCFeatureExtractor()
 
@@ -1282,10 +1354,14 @@ class BGCPredictor:
         t0 = time.perf_counter()
         alien_records = hgt_result.alien_records
 
-        logger.info("Phase 3 | BGCPredictor | %d alien genes to score", len(alien_records))
+        logger.info(
+            "Phase 3 | BGCPredictor | %d alien genes to score", len(alien_records)
+        )
 
         if not alien_records:
-            logger.warning("Phase 3 | No alien genes received — returning empty BGCResult")
+            logger.warning(
+                "Phase 3 | No alien genes received — returning empty BGCResult"
+            )
             return self._empty_result()
 
         # Always extract features (useful for analysis regardless of backend)
@@ -1294,7 +1370,9 @@ class BGCPredictor:
 
         # Route to appropriate backend
         if self._use_prophet and self._prophet is not None:
-            bgc_records = self._run_prophet(alien_records, X, all_gene_records=all_gene_records)
+            bgc_records = self._run_prophet(
+                alien_records, X, all_gene_records=all_gene_records
+            )
         else:
             bgc_records = self._run_mock(alien_records, X)
 
@@ -1313,15 +1391,19 @@ class BGCPredictor:
         hgt_set = set(r.gene_record.gene_id for r in alien_records)
         bgc_set = set(r.gene_id for r in bgc_hits)
         all_accessory_ids = set(r.gene_record.gene_id for r in hgt_result.hgt_records)
-        
+
         a = sum(1 for gid in bgc_set if gid in hgt_set)
         b = sum(1 for gid in hgt_set if gid not in bgc_set)
         c = sum(1 for gid in bgc_set if gid not in hgt_set)
-        d = sum(1 for gid in all_accessory_ids if gid not in hgt_set and gid not in bgc_set)
-        
-        odds, pval = fisher_exact([[a, b], [c, d]], alternative='greater')
+        d = sum(
+            1 for gid in all_accessory_ids if gid not in hgt_set and gid not in bgc_set
+        )
+
+        odds, pval = fisher_exact([[a, b], [c, d]], alternative="greater")
         fisher_stats = {"odds_ratio": float(odds), "p_value": float(pval)}
-        logger.info("Fisher's Exact Test (BGC enrichment in HGT): OR=%.2f, p=%.4f", odds, pval)
+        logger.info(
+            "Fisher's Exact Test (BGC enrichment in HGT): OR=%.2f, p=%.4f", odds, pval
+        )
 
         # Summary statistics
         class_distribution = {cls: 0 for cls in BGC_CLASSES}
@@ -1332,39 +1414,50 @@ class BGCPredictor:
 
         elapsed = time.perf_counter() - t0
         stats = {
-            "n_alien_scored":    len(alien_records),
-            "n_bgc_hits":        len(bgc_hits),
-            "bgc_hit_rate":      len(bgc_hits) / max(len(alien_records), 1),
-            "n_high_confidence": sum(1 for r in bgc_hits if r.confidence_tier == "High"),
-            "n_med_confidence":  sum(1 for r in bgc_hits if r.confidence_tier == "Medium"),
-            "top_class":         max(class_distribution, key=class_distribution.get),
-            "elapsed_s":         round(elapsed, 3),
-            "torch_used":        _TORCH_AVAILABLE,
-            "prophet_used":      self._use_prophet,
-            "esm_model":         self._prophet._esm_model_name if self._use_prophet else None,
-            "device":             str(self._prophet.device) if self._use_prophet else "cpu",
-            "n_context_genes":   len(all_gene_records) if all_gene_records is not None else len(alien_records),
+            "n_alien_scored": len(alien_records),
+            "n_bgc_hits": len(bgc_hits),
+            "bgc_hit_rate": len(bgc_hits) / max(len(alien_records), 1),
+            "n_high_confidence": sum(
+                1 for r in bgc_hits if r.confidence_tier == "High"
+            ),
+            "n_med_confidence": sum(
+                1 for r in bgc_hits if r.confidence_tier == "Medium"
+            ),
+            "top_class": max(class_distribution, key=class_distribution.get),
+            "elapsed_s": round(elapsed, 3),
+            "torch_used": _TORCH_AVAILABLE,
+            "prophet_used": self._use_prophet,
+            "esm_model": self._prophet._esm_model_name if self._use_prophet else None,
+            "device": str(self._prophet.device) if self._use_prophet else "cpu",
+            "n_context_genes": (
+                len(all_gene_records)
+                if all_gene_records is not None
+                else len(alien_records)
+            ),
             "fisher_enrichment": fisher_stats,
         }
 
         logger.info(
             "Phase 3 | Done in %.2fs | %d BGC hits (%.1f%%) | top class: %s | backend: %s",
-            elapsed, len(bgc_hits), stats["bgc_hit_rate"] * 100, stats["top_class"],
+            elapsed,
+            len(bgc_hits),
+            stats["bgc_hit_rate"] * 100,
+            stats["top_class"],
             "BGC-Prophet" if self._use_prophet else "Mock",
         )
 
         # DataFrames for inspection / export
-        feature_df     = self._make_feature_df(alien_records, X)
-        prediction_df  = self._make_prediction_df(bgc_records)
+        feature_df = self._make_feature_df(alien_records, X)
+        prediction_df = self._make_prediction_df(bgc_records)
 
         return BGCResult(
-            bgc_records         = bgc_records,
-            bgc_hits            = bgc_hits,
-            class_distribution  = class_distribution,
-            strain_bgc_counts   = strain_bgc_counts,
-            feature_matrix      = feature_df,
-            prediction_matrix   = prediction_df,
-            stats               = stats,
+            bgc_records=bgc_records,
+            bgc_hits=bgc_hits,
+            class_distribution=class_distribution,
+            strain_bgc_counts=strain_bgc_counts,
+            feature_matrix=feature_df,
+            prediction_matrix=prediction_df,
+            stats=stats,
         )
 
     # ------------------------------------------------------------------
@@ -1381,8 +1474,9 @@ class BGCPredictor:
         logger.info("Phase 3 | Using BGC-Prophet trained model backend")
 
         # Run Prophet pipeline
-        class_labels, class_indices, confidences, all_scores, is_bgc_flags = \
+        class_labels, class_indices, confidences, all_scores, is_bgc_flags = (
             self._prophet.predict(alien_records, all_gene_records=all_gene_records)
+        )
 
         # Apply keyword boosts if enabled
         if self.use_keyword_boost:
@@ -1415,16 +1509,18 @@ class BGCPredictor:
             else:
                 tier = "Low"
 
-            bgc_records.append(BGCGeneRecord(
-                hgt_record       = rec,
-                bgc_class        = class_labels[i],
-                bgc_class_idx    = class_indices[i],
-                confidence       = conf,
-                class_scores     = all_scores[i],
-                is_bgc           = is_bgc_flags[i],
-                confidence_tier  = tier,
-                keyword_hits     = keyword_hits_list[i],
-            ))
+            bgc_records.append(
+                BGCGeneRecord(
+                    hgt_record=rec,
+                    bgc_class=class_labels[i],
+                    bgc_class_idx=class_indices[i],
+                    confidence=conf,
+                    class_scores=all_scores[i],
+                    is_bgc=is_bgc_flags[i],
+                    confidence_tier=tier,
+                    keyword_hits=keyword_hits_list[i],
+                )
+            )
 
         return bgc_records
 
@@ -1441,7 +1537,7 @@ class BGCPredictor:
         logger.info("Phase 3 | Using mock MLP backend (no trained model)")
 
         # Model inference → raw logits
-        if _TORCH_AVAILABLE and hasattr(self, '_model') and self._model is not None:
+        if _TORCH_AVAILABLE and hasattr(self, "_model") and self._model is not None:
             logits = _torch_inference(self._model, X)
         else:
             logits = _numpy_mock_inference(X, seed=self.seed)
@@ -1454,8 +1550,8 @@ class BGCPredictor:
 
         # Softmax → probabilities (AFTER keyword boost)
         logits -= logits.max(axis=1, keepdims=True)  # numerical stability
-        exp    = np.exp(logits)
-        probs  = exp / exp.sum(axis=1, keepdims=True)
+        exp = np.exp(logits)
+        probs = exp / exp.sum(axis=1, keepdims=True)
 
         # For Mock backend, we must also ensure keyword_hits is available to BGCGeneRecord
         # but the existing loop below uses keyword_hits_list[i] correctly.
@@ -1463,10 +1559,10 @@ class BGCPredictor:
         # Assemble BGCGeneRecord objects
         bgc_records: List[BGCGeneRecord] = []
         for i, (rec, kw_hits) in enumerate(zip(alien_records, keyword_hits_list)):
-            class_scores  = probs[i].tolist()
-            cls_idx        = int(np.argmax(probs[i]))
-            cls_label      = BGC_CLASSES[cls_idx]
-            conf           = float(probs[i, cls_idx])
+            class_scores = probs[i].tolist()
+            cls_idx = int(np.argmax(probs[i]))
+            cls_label = BGC_CLASSES[cls_idx]
+            conf = float(probs[i, cls_idx])
 
             is_bgc = cls_label != "NonBGC" and conf >= self.min_confidence
 
@@ -1477,16 +1573,18 @@ class BGCPredictor:
             else:
                 tier = "Low"
 
-            bgc_records.append(BGCGeneRecord(
-                hgt_record       = rec,
-                bgc_class        = cls_label,
-                bgc_class_idx    = cls_idx,
-                confidence       = conf,
-                class_scores     = class_scores,
-                is_bgc           = is_bgc,
-                confidence_tier  = tier,
-                keyword_hits     = kw_hits,
-            ))
+            bgc_records.append(
+                BGCGeneRecord(
+                    hgt_record=rec,
+                    bgc_class=cls_label,
+                    bgc_class_idx=cls_idx,
+                    confidence=conf,
+                    class_scores=class_scores,
+                    is_bgc=is_bgc,
+                    confidence_tier=tier,
+                    keyword_hits=kw_hits,
+                )
+            )
 
         return bgc_records
 
@@ -1497,16 +1595,16 @@ class BGCPredictor:
     def _empty_result(self) -> BGCResult:
         """Return an empty BGCResult when no alien genes exist."""
         return BGCResult(
-            bgc_records        = [],
-            bgc_hits           = [],
-            class_distribution = {cls: 0 for cls in BGC_CLASSES},
-            strain_bgc_counts  = {},
-            feature_matrix     = pd.DataFrame(),
-            prediction_matrix  = pd.DataFrame(),
-            stats              = {
-                "n_alien_scored": 0, 
+            bgc_records=[],
+            bgc_hits=[],
+            class_distribution={cls: 0 for cls in BGC_CLASSES},
+            strain_bgc_counts={},
+            feature_matrix=pd.DataFrame(),
+            prediction_matrix=pd.DataFrame(),
+            stats={
+                "n_alien_scored": 0,
                 "n_bgc_hits": 0,
-                "fisher_enrichment": {"odds_ratio": 1.0, "p_value": 1.0}
+                "fisher_enrichment": {"odds_ratio": 1.0, "p_value": 1.0},
             },
         )
 
@@ -1517,13 +1615,21 @@ class BGCPredictor:
     ) -> pd.DataFrame:
         """Return feature matrix as labelled DataFrame."""
         col_names = (
-            ["gc_content", "gc_deviation", "kmer_deviation", "anomaly_score",
-             "mge_proximity", "gene_length_log", "upstream_nbrs", "downstream_nbrs"]
-            + [f"gc_bin_{i}"   for i in range(10)]
+            [
+                "gc_content",
+                "gc_deviation",
+                "kmer_deviation",
+                "anomaly_score",
+                "mge_proximity",
+                "gene_length_log",
+                "upstream_nbrs",
+                "downstream_nbrs",
+            ]
+            + [f"gc_bin_{i}" for i in range(10)]
             + [f"kmer_bin_{i}" for i in range(10)]
         )
         df = pd.DataFrame(X, columns=col_names)
-        df.insert(0, "gene_id",  [r.gene_record.gene_id  for r in records])
+        df.insert(0, "gene_id", [r.gene_record.gene_id for r in records])
         df.insert(1, "strain_id", [r.gene_record.strain_id for r in records])
         return df
 
@@ -1532,13 +1638,13 @@ class BGCPredictor:
         rows = []
         for r in bgc_records:
             row = {
-                "gene_id":        r.gene_id,
-                "strain_id":      r.strain_id,
-                "bgc_class":      r.bgc_class,
-                "confidence":     round(r.confidence, 4),
+                "gene_id": r.gene_id,
+                "strain_id": r.strain_id,
+                "bgc_class": r.bgc_class,
+                "confidence": round(r.confidence, 4),
                 "confidence_tier": r.confidence_tier,
-                "is_bgc":         r.is_bgc,
-                "keyword_hits":   "|".join(r.keyword_hits),
+                "is_bgc": r.is_bgc,
+                "keyword_hits": "|".join(r.keyword_hits),
             }
             for cls, score in zip(BGC_CLASSES, r.class_scores):
                 row[f"score_{cls}"] = round(score, 4)

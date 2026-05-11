@@ -49,7 +49,7 @@ def make_hgt(gene: GeneRecord) -> HGTGeneRecord:
         anomaly_score=0.0,
         mge_proximity=False,
         is_hgt=True,
-        evidence=[]
+        evidence=[],
     )
 
 
@@ -57,7 +57,9 @@ def make_hgt(gene: GeneRecord) -> HGTGeneRecord:
 def test_translate_cds_variants():
     # Valid coding sequence → protein >10 aa
     # Use a longer sequence to ensure >10 amino acids
-    assert _translate_cds("ATG" * 10) == "M" * 10  # "ATGATGATGATGATGATGATGATGATGATGATGATGATG" -> "MMMMMMMMMM"
+    assert (
+        _translate_cds("ATG" * 10) == "M" * 10
+    )  # "ATGATGATGATGATGATGATGATGATGATGATGATGATG" -> "MMMMMMMMMM"
     # Short protein (<10 aa) → None
     assert _translate_cds("ATGATG") is None
     # Invalid chars replaced by N, N‑preserved
@@ -74,7 +76,7 @@ def test_empty_hgtresult_returns_empty_bgcresult():
         hgt_records=[],
         strain_gc_profiles={},
         feature_matrix=pd.DataFrame(),
-        stats={}
+        stats={},
     )
     result: BGCResult = predictor.run(empty_hgt)
 
@@ -99,14 +101,16 @@ def test_mock_backend_with_keyword_boost():
         alien_records=[hgt1, hgt2],
         hgt_records=[hgt1, hgt2],
         strain_gc_profiles={"strainA": 0.5},
-        feature_matrix=pd.DataFrame({
-            "gene_id": ["g1", "g2"],
-            "gc_content": [0.5, 0.5],
-            "gc_deviation": [0.1, 0.1],
-            "kmer_deviation": [0.2, 0.2],
-            "mge_proximity": [0.0, 0.0]
-        }).set_index("gene_id"),
-        stats={}
+        feature_matrix=pd.DataFrame(
+            {
+                "gene_id": ["g1", "g2"],
+                "gc_content": [0.5, 0.5],
+                "gc_deviation": [0.1, 0.1],
+                "kmer_deviation": [0.2, 0.2],
+                "mge_proximity": [0.0, 0.0],
+            }
+        ).set_index("gene_id"),
+        stats={},
     )
 
     # Use lower min_confidence to ensure the keyword boost triggers is_bgc=True in mock mode
@@ -122,10 +126,12 @@ def test_mock_backend_with_keyword_boost():
     # Keyword “non-ribosomal” maps to class index 3 (NRP). Verify boost was applied.
     kw_hits = [r.keyword_hits for r in result.bgc_records]
     assert any("non-ribosomal" in hits for hits in kw_hits)
-    
+
     # Debug: Print confidence and is_bgc for each record
     for i, r in enumerate(result.bgc_records):
-        print(f"Record {i}: is_bgc={r.is_bgc}, confidence={r.confidence}, class={r.bgc_class}, keyword_hits={r.keyword_hits}")
+        print(
+            f"Record {i}: is_bgc={r.is_bgc}, confidence={r.confidence}, class={r.bgc_class}, keyword_hits={r.keyword_hits}"
+        )
 
     # At least one record should be flagged as BGC (confidence above default MED)
     assert any(r.is_bgc for r in result.bgc_records)

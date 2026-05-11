@@ -33,16 +33,39 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # MGE keyword list — product strings that indicate mobile elements
 # ---------------------------------------------------------------------------
-MGE_KEYWORDS = frozenset([
-    "transposase", "integrase", "recombinase", "resolvase",
-    "phage", "prophage", "insertion sequence", "is element",
-    "conjugal", "conjugative", "plasmid", "relaxase", "mob protein",
-    "mobilization", "mobilase",
-    "terminase", "capsid", "tail fiber", "portal protein",
-    "site-specific recombinase", "serine recombinase",
-    "tyrosine recombinase", "hin recombinase", "xre",
-    "toxin", "antitoxin", "crispr", "crispr-associated", "cas protein",
-])
+MGE_KEYWORDS = frozenset(
+    [
+        "transposase",
+        "integrase",
+        "recombinase",
+        "resolvase",
+        "phage",
+        "prophage",
+        "insertion sequence",
+        "is element",
+        "conjugal",
+        "conjugative",
+        "plasmid",
+        "relaxase",
+        "mob protein",
+        "mobilization",
+        "mobilase",
+        "terminase",
+        "capsid",
+        "tail fiber",
+        "portal protein",
+        "site-specific recombinase",
+        "serine recombinase",
+        "tyrosine recombinase",
+        "hin recombinase",
+        "xre",
+        "toxin",
+        "antitoxin",
+        "crispr",
+        "crispr-associated",
+        "cas protein",
+    ]
+)
 
 # Distance threshold (bp) for MGE proximity flag
 MGE_PROXIMITY_BP = 10_000
@@ -52,32 +75,36 @@ MGE_PROXIMITY_BP = 10_000
 # Data containers
 # ===========================================================================
 
+
 @dataclass
 class HGTGeneRecord:
     """Phase 2 output: an accessory gene annotated with HGT evidence scores."""
+
     gene_record: GeneRecord
-    gc_content: float            # GC fraction of this gene
-    gc_deviation: float          # |gene_gc - host_gc| normalised by host_gc
-    kmer_deviation: float        # Mahalanobis-like distance from host k-mer profile
-    mge_proximity: bool          # True if within MGE_PROXIMITY_BP of an MGE
-    anomaly_score: float         # IsolationForest decision score (higher = more anomalous)
-    is_hgt: bool                 # True if flagged as Alien_HGT_Region
-    evidence: List[str] = field(default_factory=list)   # human-readable evidence list
+    gc_content: float  # GC fraction of this gene
+    gc_deviation: float  # |gene_gc - host_gc| normalised by host_gc
+    kmer_deviation: float  # Mahalanobis-like distance from host k-mer profile
+    mge_proximity: bool  # True if within MGE_PROXIMITY_BP of an MGE
+    anomaly_score: float  # IsolationForest decision score (higher = more anomalous)
+    is_hgt: bool  # True if flagged as Alien_HGT_Region
+    evidence: List[str] = field(default_factory=list)  # human-readable evidence list
 
 
 @dataclass
 class HGTResult:
     """Full Phase 2 output — passed to Phase 3."""
-    hgt_records: List[HGTGeneRecord]          # all accessory genes, scored
-    alien_records: List[HGTGeneRecord]        # subset flagged is_hgt=True
-    strain_gc_profiles: Dict[str, float]      # strain → mean GC content
-    feature_matrix: pd.DataFrame              # genes × features (for inspection)
+
+    hgt_records: List[HGTGeneRecord]  # all accessory genes, scored
+    alien_records: List[HGTGeneRecord]  # subset flagged is_hgt=True
+    strain_gc_profiles: Dict[str, float]  # strain → mean GC content
+    feature_matrix: pd.DataFrame  # genes × features (for inspection)
     stats: Dict[str, Any] = field(default_factory=dict)
 
 
 # ===========================================================================
 # Helper functions
 # ===========================================================================
+
 
 def _gc_content(seq: str) -> float:
     """Return GC fraction of a nucleotide sequence. Returns 0.0 if empty."""
@@ -102,7 +129,7 @@ def _tetranucleotide_freq(seq: str) -> np.ndarray:
     seq_upper = seq.upper()
 
     for i in range(len(seq_upper) - k + 1):
-        mer = seq_upper[i: i + k]
+        mer = seq_upper[i : i + k]
         if all(b in bases for b in mer):
             idx = 0
             for b in mer:
@@ -179,6 +206,7 @@ def _is_near_mge(
 # Main Class
 # ===========================================================================
 
+
 class HGTDetective:
     """
     Phase 2 — The HGT Detective Engine.
@@ -219,7 +247,8 @@ class HGTDetective:
 
         logger.info(
             "HGTDetective initialised | contamination=%.2f | trees=%d",
-            contamination, n_estimators,
+            contamination,
+            n_estimators,
         )
 
     # ------------------------------------------------------------------
@@ -260,7 +289,9 @@ class HGTDetective:
         host_gc: Dict[str, float] = {}
         mge_map: Dict[str, List[Tuple[str, int, int]]] = {}
 
-        all_annotation_records = phase1_result.accessory_records  # we reuse product info
+        all_annotation_records = (
+            phase1_result.accessory_records
+        )  # we reuse product info
         # But we need ALL records for MGE search — accessory_records only has accessory
         # We'll search within accessory for MGE labels (proxy for nearby MGEs)
 
@@ -268,11 +299,15 @@ class HGTDetective:
             kmer_prof, gc = _build_host_kmer_profile(fasta_store, strain_id)
             host_kmer_profiles[strain_id] = kmer_prof
             host_gc[strain_id] = gc
-            mge_positions = _find_mge_positions(phase1_result.accessory_records, strain_id)
+            mge_positions = _find_mge_positions(
+                phase1_result.accessory_records, strain_id
+            )
             mge_map[strain_id] = mge_positions
             logger.debug(
                 "  %s: host GC=%.2f%%, %d MGE loci found",
-                strain_id, gc * 100, len(mge_positions),
+                strain_id,
+                gc * 100,
+                len(mge_positions),
             )
 
         # 2. Compute per-gene features
@@ -310,20 +345,22 @@ class HGTDetective:
                 gc_deviation=gc_dev,
                 kmer_deviation=kmer_dev,
                 mge_proximity=near_mge or self_is_mge,
-                anomaly_score=0.0,   # filled in after IsolationForest
+                anomaly_score=0.0,  # filled in after IsolationForest
                 is_hgt=False,
             )
             hgt_records_all.append(hgt_rec)
 
-            feature_rows.append({
-                "gene_id": rec.gene_id,
-                "strain_id": sid,
-                "gc_content": gene_gc,
-                "gc_deviation": gc_dev,
-                "kmer_deviation": kmer_dev,
-                "mge_proximity": float(near_mge or self_is_mge),
-                "gene_length": rec.length,
-            })
+            feature_rows.append(
+                {
+                    "gene_id": rec.gene_id,
+                    "strain_id": sid,
+                    "gc_content": gene_gc,
+                    "gc_deviation": gc_dev,
+                    "kmer_deviation": kmer_dev,
+                    "mge_proximity": float(near_mge or self_is_mge),
+                    "gene_length": rec.length,
+                }
+            )
 
         # 3. Isolation Forest anomaly detection
         feature_df = pd.DataFrame(feature_rows).set_index("gene_id")
@@ -338,8 +375,10 @@ class HGTDetective:
             )
             scores = np.zeros(len(X))
             labels = np.where(
-                (feature_df["gc_deviation"] > 0.05) | (feature_df["kmer_deviation"] > 0.05),
-                -1, 1
+                (feature_df["gc_deviation"] > 0.05)
+                | (feature_df["kmer_deviation"] > 0.05),
+                -1,
+                1,
             )
         else:
             scaler = StandardScaler()
@@ -352,8 +391,8 @@ class HGTDetective:
                 n_jobs=-1,
             )
             clf.fit(X_scaled)
-            scores = clf.decision_function(X_scaled)   # higher = more normal
-            labels = clf.predict(X_scaled)             # -1 = anomaly, 1 = normal
+            scores = clf.decision_function(X_scaled)  # higher = more normal
+            labels = clf.predict(X_scaled)  # -1 = anomaly, 1 = normal
 
         # 4. Annotate HGT records
         gene_id_to_score = dict(zip(feature_df.index, scores))
@@ -366,8 +405,8 @@ class HGTDetective:
             score = float(gene_id_to_score.get(gid, 0.0))
             label = int(gene_id_to_label.get(gid, 1))
 
-            hgt_rec.anomaly_score = -score   # negate: high = anomalous
-            hgt_rec.is_hgt = (label == -1)
+            hgt_rec.anomaly_score = -score  # negate: high = anomalous
+            hgt_rec.is_hgt = label == -1
 
             # Build evidence list
             evidence: List[str] = []
@@ -379,9 +418,13 @@ class HGTDetective:
             if hgt_rec.kmer_deviation > 0.03:
                 evidence.append(f"k-mer cosine deviation {hgt_rec.kmer_deviation:.4f}")
             if hgt_rec.mge_proximity:
-                evidence.append("proximal to Mobile Genetic Element (transposase/integrase/phage)")
+                evidence.append(
+                    "proximal to Mobile Genetic Element (transposase/integrase/phage)"
+                )
             if not evidence and hgt_rec.is_hgt:
-                evidence.append("IsolationForest multi-feature anomaly (combined signal)")
+                evidence.append(
+                    "IsolationForest multi-feature anomaly (combined signal)"
+                )
             hgt_rec.evidence = evidence
 
             if hgt_rec.is_hgt:
@@ -391,7 +434,9 @@ class HGTDetective:
         n_total = len(hgt_records_all)
         logger.info(
             "Phase 2 complete: %d / %d accessory genes flagged as Alien_HGT_Regions (%.1f%%)",
-            n_hgt, n_total, n_hgt / n_total * 100 if n_total else 0,
+            n_hgt,
+            n_total,
+            n_hgt / n_total * 100 if n_total else 0,
         )
 
         stats = {
