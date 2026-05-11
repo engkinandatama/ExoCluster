@@ -59,6 +59,11 @@ tmp_phase3_fix_check/
 tmp_phase3_fix_check2/
 tmp_phase3_full_context/
 tmp_bgp/
+benchmark_output_kmer/
+benchmark_output_mmseqs2/
+profiling_results/
+test_output/
+.snakemake/
 
 # ─── Large data files ─────────────────────────────────────────────────────────
 # Genome assemblies & annotations (typically hundreds of MB)
